@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
+  <title>休息一下</title>
+  <link rel="stylesheet" href="overlay.css" />
+</head>
+<body>
+  <div class="ov-wrap">
+    <div id="ovTitle" class="ov-title">短休息</div>
+    <div id="ovClock" class="ov-clock">05:00</div>
+    <div class="ov-progress"><div id="ovBar" class="ov-bar"></div></div>
+    <div id="ovTip" class="ov-tip"></div>
+    <div id="dots" class="ov-dots"></div>
+
+    <div id="noteCard" class="note-card interactive">
+      <input id="noteInput" maxlength="200" placeholder="这个番茄做了什么？（可跳过，回车保存）" />
+      <button id="noteSave" class="note-btn">保存</button>
+    </div>
+
+    <button id="btnStartNext" class="ov-primary interactive" hidden>开始下一个番茄</button>
+
+    <div class="ov-bottom interactive">
+      <button id="btnGrace" class="ov-outline" hidden>再给 3 分钟收尾</button>
+      <button id="btnSkip" class="ov-ghost" hidden>跳过休息</button>
+      <button id="btnEnd" class="ov-ghost">结束专注</button>
+    </div>
+  </div>
+  <script src="sound.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>

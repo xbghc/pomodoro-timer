@@ -1,0 +1,182 @@
+/* 全屏休息遮罩：始终深色柔和，独立于应用主题 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 38%, #232134 0%, #141420 70%);
+  color: #ece9e2;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ov-wrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  padding: 40px;
+}
+
+.ov-title {
+  font-size: 26px;
+  letter-spacing: 10px;
+  color: #a8a4b8;
+  text-indent: 10px;
+}
+
+.ov-clock {
+  font-size: clamp(90px, 16vw, 190px);
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 6px;
+  line-height: 1;
+}
+
+.ov-progress {
+  width: min(420px, 50vw);
+  height: 4px;
+  border-radius: 2px;
+  background: #2e2b3d;
+  overflow: hidden;
+}
+
+.ov-bar {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: #55b183;
+  transition: width 0.4s linear;
+}
+
+.ov-tip {
+  font-size: 16px;
+  color: #8f8ba0;
+  min-height: 22px;
+}
+
+.ov-dots {
+  display: flex;
+  gap: 10px;
+}
+
+.ov-dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2e2b3d;
+}
+
+.ov-dots .dot.filled {
+  background: #e0604a;
+}
+
+.note-card {
+  display: flex;
+  gap: 10px;
+  width: min(520px, 70vw);
+}
+
+.note-card input {
+  flex: 1;
+  background: #1d1b29;
+  border: 1px solid #35324a;
+  border-radius: 10px;
+  color: #ece9e2;
+  padding: 12px 16px;
+  font-size: 15px;
+  outline: none;
+}
+
+.note-card input:focus {
+  border-color: #6f6a8a;
+}
+
+.note-card input::placeholder {
+  color: #6b6780;
+}
+
+.note-btn {
+  background: #2b2840;
+  border: 1px solid #45415e;
+  color: #cfccdd;
+  border-radius: 10px;
+  padding: 0 20px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.note-btn:hover {
+  border-color: #6f6a8a;
+}
+
+.note-btn.saved {
+  color: #55b183;
+  border-color: #3a5d4c;
+}
+
+.ov-primary {
+  background: #e0604a;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  padding: 16px 46px;
+  border-radius: 14px;
+  transition: background 0.15s;
+}
+
+.ov-primary:hover {
+  background: #ea7460;
+}
+
+.ov-bottom {
+  display: flex;
+  gap: 26px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.ov-outline {
+  background: transparent;
+  border: 1px solid #45415e;
+  color: #b5b1c6;
+  border-radius: 10px;
+  padding: 9px 20px;
+  font-size: 14px;
+}
+
+.ov-outline:hover {
+  border-color: #6f6a8a;
+  color: #ece9e2;
+}
+
+.ov-ghost {
+  background: none;
+  border: none;
+  color: #6b6780;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ov-ghost:hover {
+  color: #b5b1c6;
+}
+
+/* 副屏：只显示倒计时 */
+.mode-secondary .interactive {
+  display: none;
+}

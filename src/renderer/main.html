@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
+  <title>番茄钟</title>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="main.css" />
+</head>
+<body>
+  <nav id="tabs">
+    <button class="tab-btn active" data-tab="timer">计时</button>
+    <button class="tab-btn" data-tab="history">历史</button>
+    <button class="tab-btn" data-tab="settings">设置</button>
+  </nav>
+
+  <main>
+    <!-- 计时 -->
+    <section id="tab-timer" class="tab active">
+      <div id="phaseLabel" class="phase-label">空闲</div>
+      <div class="ring-wrap">
+        <svg viewBox="0 0 220 220">
+          <circle class="ring-track" cx="110" cy="110" r="100" />
+          <circle id="ringFill" class="ring-fill" cx="110" cy="110" r="100" />
+        </svg>
+        <div class="ring-center">
+          <div id="clock" class="clock">25:00</div>
+          <div id="subLabel" class="sub-label"></div>
+        </div>
+      </div>
+      <div id="dots" class="dots"></div>
+      <div id="todayLine" class="today-line">今日完成 0 个番茄</div>
+      <div class="controls">
+        <button id="btnStart" class="btn primary big">开始番茄</button>
+        <button id="btnPause" class="btn secondary" hidden>暂停</button>
+        <button id="btnResume" class="btn primary" hidden>继续</button>
+        <button id="btnAbandon" class="btn ghost" hidden>放弃</button>
+        <button id="btnFinishGrace" class="btn primary" hidden>立即去休息</button>
+      </div>
+      <button id="btnEndFocus" class="link-btn" hidden>结束专注</button>
+    </section>
+
+    <!-- 历史 -->
+    <section id="tab-history" class="tab">
+      <div class="date-nav">
+        <button id="datePrev" class="nav-arrow">◀</button>
+        <div id="dateLabel" class="date-label">2026-08-08</div>
+        <button id="dateNext" class="nav-arrow">▶</button>
+        <button id="dateToday" class="chip">今天</button>
+      </div>
+      <div id="daySummary" class="day-summary"></div>
+      <ul id="recordList" class="record-list"></ul>
+      <div id="emptyDay" class="empty" hidden>这一天没有记录</div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="tab-settings" class="tab">
+      <div class="setting-group">
+        <h3>时长（分钟）</h3>
+        <label class="row"><span>工作</span><input id="setWork" type="number" min="1" max="180" /></label>
+        <label class="row"><span>短休息</span><input id="setShort" type="number" min="1" max="60" /></label>
+        <label class="row"><span>长休息</span><input id="setLong" type="number" min="1" max="120" /></label>
+        <label class="row"><span>几个番茄后长休息</span><input id="setEvery" type="number" min="0" max="12" /></label>
+        <p class="hint">0 表示不使用长休息</p>
+        <label class="row"><span>「收尾」时长</span><input id="setGrace" type="number" min="1" max="15" /></label>
+      </div>
+      <div class="setting-group">
+        <h3>提醒</h3>
+        <label class="row"><span>提示音</span><input id="setSound" type="checkbox" /></label>
+        <label class="row"><span>音量</span>
+          <span class="vol-row"><input id="setVolume" type="range" min="0" max="100" /><button id="btnTestSound" class="chip">试听</button></span>
+        </label>
+      </div>
+      <div class="setting-group">
+        <h3>外观</h3>
+        <label class="row"><span>主题</span>
+          <select id="setTheme">
+            <option value="system">跟随系统</option>
+            <option value="dark">深色</option>
+            <option value="light">浅色</option>
+          </select>
+        </label>
+      </div>
+      <div class="setting-group">
+        <h3>系统</h3>
+        <label class="row"><span>开机自启（启动到托盘）</span><input id="setAutoStart" type="checkbox" /></label>
+      </div>
+      <p class="about">番茄钟 v1.0.0 · 数据仅保存在本机</p>
+    </section>
+  </main>
+
+  <script src="sound.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

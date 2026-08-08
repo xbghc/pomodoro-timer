@@ -1,0 +1,122 @@
+/* 主题变量：浅色为默认，data-theme="dark" 覆盖 */
+:root {
+  --bg: #f6f4f0;
+  --panel: #ffffff;
+  --text: #2b2722;
+  --muted: #8d867b;
+  --accent: #d95540;
+  --accent-hover: #c24936;
+  --on-accent: #ffffff;
+  --green: #3f9e6e;
+  --border: #e5e0d7;
+  --ring-track: #ece8e0;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme='dark'] {
+  --bg: #17161a;
+  --panel: #211f26;
+  --text: #ebe8e2;
+  --muted: #918c95;
+  --accent: #e0604a;
+  --accent-hover: #ea7460;
+  --on-accent: #ffffff;
+  --green: #55b183;
+  --border: #33303a;
+  --ring-track: #2c2a33;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 22px;
+  font-size: 15px;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn.primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn.big {
+  padding: 14px 40px;
+  font-size: 17px;
+  border-radius: 12px;
+}
+
+.btn.secondary {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn.secondary:hover {
+  border-color: var(--muted);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.btn.ghost:hover {
+  color: var(--text);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link-btn:hover {
+  color: var(--text);
+}
+
+.dots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ring-track);
+  border: 1px solid var(--border);
+}
+
+.dots .dot.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}

@@ -1,0 +1,50 @@
+{
+  "name": "pomodoro-timer",
+  "version": "1.0.0",
+  "description": "番茄钟 —— 到点强制休息的 Windows 桌面番茄钟",
+  "main": "src/main/main.js",
+  "author": "ghm",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "icons": "node scripts/generate-icons.js",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.ghm.pomodoro-timer",
+    "productName": "番茄钟",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "executableName": "PomodoroTimer",
+      "artifactName": "PomodoroTimer-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "番茄钟"
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.62.1"
+  }
+}
