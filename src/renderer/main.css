@@ -1,4 +1,4 @@
-/* 主窗口布局 */
+/* 主窗口布局：仪表面板 */
 body {
   display: flex;
   flex-direction: column;
@@ -8,26 +8,36 @@ body {
 
 #tabs {
   display: flex;
-  gap: 4px;
-  padding: 10px 14px 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  gap: 2px;
+  padding: 12px 18px 0;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg);
 }
 
 .tab-btn {
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 14px;
-  padding: 8px 16px;
-  border-radius: 8px 8px 0 0;
-  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  padding: 8px 14px 10px;
+  position: relative;
 }
 
 .tab-btn.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
+  color: var(--ink);
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -1px;
+  width: 18px;
+  height: 2px;
+  background: var(--red);
 }
 
 main {
@@ -44,7 +54,7 @@ main {
   display: block;
 }
 
-/* ---------- 计时页 ---------- */
+/* ---------- 计时页：表盘 ---------- */
 #tab-timer {
   display: none;
   text-align: center;
@@ -54,73 +64,89 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding-top: 26px;
+  gap: 18px;
+  padding-top: 24px;
 }
 
-.phase-label {
-  font-size: 17px;
-  color: var(--muted);
-  letter-spacing: 2px;
-}
-
-.ring-wrap {
+.dial-wrap {
   position: relative;
-  width: 230px;
-  height: 230px;
+  width: 262px;
+  height: 262px;
 }
 
-.ring-wrap svg {
+.dial-wrap svg {
   width: 100%;
   height: 100%;
-  transform: rotate(-90deg);
 }
 
-.ring-track {
-  fill: none;
-  stroke: var(--ring-track);
-  stroke-width: 10;
+.dial-tick {
+  stroke: var(--tick);
+  stroke-width: 1;
 }
 
-.ring-fill {
+.dial-tick.major {
+  stroke: var(--muted);
+  stroke-width: 1.6;
+}
+
+.dial-num {
+  fill: var(--muted);
+  font-size: 9.5px;
+  font-family: 'Bahnschrift', 'Segoe UI', sans-serif;
+  letter-spacing: 0.05em;
+}
+
+.dial-arc {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 10;
+  stroke: var(--red);
+  stroke-width: 5;
   stroke-linecap: round;
-  stroke-dasharray: 628.32;
-  stroke-dashoffset: 0;
-  transition: stroke-dashoffset 0.4s linear, stroke 0.3s;
+  transition: stroke 0.3s;
 }
 
-.ring-fill.green {
+.dial-arc.rest {
   stroke: var(--green);
 }
 
-.ring-center {
+.dial-arc.idle {
+  stroke: var(--hairline);
+}
+
+.dial-wrap.paused .dial-arc,
+.dial-wrap.paused .clock {
+  opacity: 0.45;
+}
+
+.dial-center {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
+  pointer-events: none;
 }
 
 .clock {
-  font-size: 52px;
+  font-size: 54px;
   font-weight: 300;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 2px;
+  letter-spacing: 0.03em;
+  transition: opacity 0.3s;
 }
 
 .sub-label {
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
   color: var(--muted);
-  min-height: 18px;
+  min-height: 17px;
 }
 
 .today-line {
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
   color: var(--muted);
 }
 
@@ -131,99 +157,108 @@ main {
   flex-wrap: wrap;
 }
 
-/* ---------- 历史页 ---------- */
+/* ---------- 历史页：工作日志 ---------- */
 .date-nav {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 6px;
 }
 
 .nav-arrow {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  width: 32px;
-  height: 32px;
-  font-size: 12px;
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  color: var(--muted);
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
+}
+
+.nav-arrow:hover {
+  color: var(--ink);
+  border-color: var(--tick);
 }
 
 .nav-arrow:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: default;
 }
 
 .date-label {
-  font-size: 15px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
-  min-width: 110px;
+  letter-spacing: 0.08em;
+  min-width: 128px;
   text-align: center;
 }
 
 .chip {
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: none;
+  border: 1px solid var(--hairline);
   border-radius: 999px;
-  color: var(--text);
+  color: var(--muted);
   font-size: 12px;
+  letter-spacing: 0.1em;
   padding: 5px 14px;
 }
 
 .chip:hover {
-  border-color: var(--muted);
+  color: var(--ink);
+  border-color: var(--tick);
 }
 
 .day-summary {
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 4px;
   min-height: 18px;
 }
 
 .record-list {
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .record-list li {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
   display: flex;
-  gap: 10px;
+  gap: 14px;
   align-items: center;
-  box-shadow: var(--shadow);
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .rec-time {
+  font-family: 'Bahnschrift', 'Segoe UI', sans-serif;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   white-space: nowrap;
 }
 
+/* 印章：红圈「完」/ 灰圈「弃」 */
 .rec-badge {
-  font-size: 11px;
-  line-height: 1;
-  padding: 4px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex: none;
 }
 
 .rec-badge.done {
-  color: var(--green);
-  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--red);
+  border: 1.5px solid var(--red);
 }
 
 .rec-badge.abandoned {
   color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  border: 1.5px solid var(--tick);
 }
 
 .rec-note {
@@ -235,31 +270,35 @@ main {
 
 .rec-note.no-note {
   color: var(--muted);
-  font-style: italic;
 }
 
 .empty {
   text-align: center;
   color: var(--muted);
-  font-size: 14px;
-  margin-top: 40px;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  margin-top: 48px;
 }
 
-/* ---------- 设置页 ---------- */
+/* ---------- 设置页：面板分组 ---------- */
 .setting-group {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 18px;
-  margin-bottom: 14px;
-  box-shadow: var(--shadow);
+  padding: 16px 2px 6px;
+  border-top: 1px solid var(--hairline);
+  margin-bottom: 10px;
+}
+
+.setting-group:first-child {
+  border-top: none;
 }
 
 .setting-group h3 {
-  font-size: 13px;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-indent: 0.02em;
   color: var(--muted);
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  font-family: 'Bahnschrift', 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
 
 .setting-group .row {
@@ -267,34 +306,40 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 7px 0;
+  padding: 8px 0;
   font-size: 14px;
 }
 
 .setting-group input[type='number'] {
-  width: 72px;
+  width: 68px;
   padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-family: 'Bahnschrift', 'Segoe UI', sans-serif;
   font-size: 14px;
   text-align: center;
 }
 
+.setting-group input[type='number']:focus {
+  border-color: var(--tick);
+  outline: none;
+}
+
 .setting-group select {
   padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
   background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .setting-group input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
+  width: 17px;
+  height: 17px;
+  accent-color: var(--red);
 }
 
 .vol-row {
@@ -305,18 +350,19 @@ main {
 
 .setting-group input[type='range'] {
   width: 130px;
-  accent-color: var(--accent);
+  accent-color: var(--red);
 }
 
 .hint {
   font-size: 12px;
   color: var(--muted);
-  margin: -4px 0 6px;
+  margin: -2px 0 4px;
 }
 
 .about {
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
   color: var(--muted);
-  margin-top: 20px;
+  margin-top: 22px;
 }

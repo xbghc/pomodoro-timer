@@ -197,7 +197,7 @@ function main() {
         closable: false,
         focusable: primary,
         show: false,
-        backgroundColor: '#141420',
+        backgroundColor: '#141210',
         webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false },
       });
       win.setAlwaysOnTop(true, 'screen-saver');

@@ -29,6 +29,7 @@ function render(state) {
   if (phase !== 'break' && phase !== 'breakOver') return;
 
   const isOver = phase === 'breakOver';
+  document.body.classList.toggle('over', isOver);
   $('ovTitle').textContent = isOver ? '休息结束' : breakType === 'long' ? '长休息' : '短休息';
   $('ovClock').textContent = isOver ? '00:00' : fmt(remainingMs);
   $('ovBar').style.width = `${isOver || !phaseDurationMs ? 0 : (remainingMs / phaseDurationMs) * 100}%`;

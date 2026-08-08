@@ -1,30 +1,28 @@
-/* 主题变量：浅色为默认，data-theme="dark" 覆盖 */
+/* 主题：珐琅与墨水（浅色默认，data-theme="dark" 为电木黑） */
 :root {
-  --bg: #f6f4f0;
+  --bg: #fafaf7;
   --panel: #ffffff;
-  --text: #2b2722;
-  --muted: #8d867b;
-  --accent: #d95540;
-  --accent-hover: #c24936;
-  --on-accent: #ffffff;
-  --green: #3f9e6e;
-  --border: #e5e0d7;
-  --ring-track: #ece8e0;
-  --shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --ink: #201e1b;
+  --muted: #8b867c;
+  --red: #d6402b;
+  --red-deep: #b53522;
+  --green: #4a7c59;
+  --tick: #a9a49b;
+  --hairline: #e6e3dc;
+  --on-red: #fffdf9;
 }
 
 [data-theme='dark'] {
-  --bg: #17161a;
-  --panel: #211f26;
-  --text: #ebe8e2;
-  --muted: #918c95;
-  --accent: #e0604a;
-  --accent-hover: #ea7460;
-  --on-accent: #ffffff;
-  --green: #55b183;
-  --border: #33303a;
-  --ring-track: #2c2a33;
-  --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --bg: #141210;
+  --panel: #1d1a17;
+  --ink: #efebe3;
+  --muted: #8f887c;
+  --red: #e25541;
+  --red-deep: #ef6a57;
+  --green: #6fa37e;
+  --tick: #57534b;
+  --hairline: #2b2723;
+  --on-red: #fffdf9;
 }
 
 * {
@@ -36,7 +34,7 @@
 body {
   font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -46,77 +44,106 @@ button {
   cursor: pointer;
 }
 
+:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+/* 仪表字体：数字、眉标 */
+.numeral,
+.eyebrow {
+  font-family: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* 按钮体系 */
 .btn {
-  border: none;
-  border-radius: 10px;
-  padding: 10px 22px;
-  font-size: 15px;
-  transition: background 0.15s, opacity 0.15s;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .btn.primary {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--red);
+  color: var(--on-red);
+  border: 1px solid var(--red);
 }
 
 .btn.primary:hover {
-  background: var(--accent-hover);
+  background: var(--red-deep);
+  border-color: var(--red-deep);
 }
 
 .btn.big {
-  padding: 14px 40px;
-  font-size: 17px;
-  border-radius: 12px;
+  padding: 13px 42px;
+  font-size: 15px;
 }
 
 .btn.secondary {
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--tick);
 }
 
 .btn.secondary:hover {
-  border-color: var(--muted);
+  border-color: var(--ink);
 }
 
 .btn.ghost {
   background: transparent;
   color: var(--muted);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
 }
 
 .btn.ghost:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .link-btn {
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
 
 .link-btn:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 
+/* 循环计数：发条槽（细横杠，填红表示已完成） */
 .dots {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   justify-content: center;
 }
 
 .dots .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--ring-track);
-  border: 1px solid var(--border);
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--hairline);
 }
 
 .dots .dot.filled {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

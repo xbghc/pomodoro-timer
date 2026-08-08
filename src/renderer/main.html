@@ -15,16 +15,17 @@
   </nav>
 
   <main>
-    <!-- 计时 -->
+    <!-- 计时：60 分钟刻度表盘（厨房计时器盘面） -->
     <section id="tab-timer" class="tab active">
-      <div id="phaseLabel" class="phase-label">空闲</div>
-      <div class="ring-wrap">
-        <svg viewBox="0 0 220 220">
-          <circle class="ring-track" cx="110" cy="110" r="100" />
-          <circle id="ringFill" class="ring-fill" cx="110" cy="110" r="100" />
+      <div id="phaseLabel" class="phase-label eyebrow">空闲</div>
+      <div class="dial-wrap">
+        <svg id="dialSvg" viewBox="0 0 260 260">
+          <g id="dialTicks"></g>
+          <g id="dialNums"></g>
+          <path id="dialArc" class="dial-arc" d="" />
         </svg>
-        <div class="ring-center">
-          <div id="clock" class="clock">25:00</div>
+        <div class="dial-center">
+          <div id="clock" class="clock numeral">25:00</div>
           <div id="subLabel" class="sub-label"></div>
         </div>
       </div>

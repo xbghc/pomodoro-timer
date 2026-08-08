@@ -1,7 +1,53 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const RING_C = 628.32; // 2πr, r=100
+
+// 表盘几何：60 分钟刻度盘（厨房计时器盘面）
+const DIAL = { c: 130, tickOuter: 118, tickInner: 111, majorInner: 105, num: 93, arc: 125 };
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function polar(r, deg) {
+  const rad = ((deg - 90) * Math.PI) / 180;
+  return [DIAL.c + r * Math.cos(rad), DIAL.c + r * Math.sin(rad)];
+}
+
+function buildDial() {
+  const ticks = $('dialTicks');
+  for (let m = 0; m < 60; m++) {
+    const deg = m * 6;
+    const major = m % 5 === 0;
+    const [x1, y1] = polar(major ? DIAL.majorInner : DIAL.tickInner, deg);
+    const [x2, y2] = polar(DIAL.tickOuter, deg);
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', x1);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+    line.setAttribute('class', `dial-tick${major ? ' major' : ''}`);
+    ticks.appendChild(line);
+  }
+  const nums = $('dialNums');
+  for (const n of [0, 10, 20, 30, 40, 50]) {
+    const [x, y] = polar(DIAL.num, n * 6);
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('x', x);
+    text.setAttribute('y', y);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('class', 'dial-num');
+    text.textContent = n;
+    nums.appendChild(text);
+  }
+}
+
+// 剩余分钟在 60 分制盘面上的弧线（时长超过 60 分钟时扩大量程）
+function dialArcPath(remainingMs, scaleMin) {
+  const span = Math.min(359.99, ((remainingMs / 60000) / scaleMin) * 360);
+  if (span < 0.2) return '';
+  const [sx, sy] = polar(DIAL.arc, 0);
+  const [ex, ey] = polar(DIAL.arc, span);
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${DIAL.arc} ${DIAL.arc} 0 ${span > 180 ? 1 : 0} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+}
 
 let settings = null;
 let lastState = null;
@@ -74,11 +120,13 @@ function render(state) {
   $('clock').textContent =
     phase === 'idle' ? `${config.workMin}:00`.padStart(5, '0') : fmt(remainingMs);
 
-  const active = phase === 'work' || phase === 'break';
-  const p = phase === 'idle' ? 1 : active && phaseDurationMs > 0 ? remainingMs / phaseDurationMs : 0;
-  const ring = $('ringFill');
-  ring.style.strokeDashoffset = String(RING_C * (1 - p));
-  ring.classList.toggle('green', phase === 'break' || phase === 'breakOver');
+  const arc = $('dialArc');
+  const displayMs = phase === 'idle' ? config.workMin * 60000 : remainingMs;
+  const scaleMin = Math.max(60, Math.ceil((phase === 'idle' ? config.workMin * 60000 : phaseDurationMs) / 60000));
+  arc.setAttribute('d', dialArcPath(displayMs, scaleMin));
+  arc.classList.toggle('idle', phase === 'idle');
+  arc.classList.toggle('rest', phase === 'break' || phase === 'breakOver');
+  document.querySelector('.dial-wrap').classList.toggle('paused', paused);
 
   renderDots($('dots'), state);
 
@@ -144,7 +192,8 @@ function renderHistoryTab() {
     const mark = document.createElement('span');
     const ok = r.status === 'completed';
     mark.className = `rec-badge ${ok ? 'done' : 'abandoned'}`;
-    mark.textContent = ok ? '完成' : '放弃';
+    mark.textContent = ok ? '完' : '弃';
+    mark.title = ok ? '完成' : '放弃';
 
     const note = document.createElement('span');
     note.className = 'rec-note' + (r.note ? '' : ' no-note');
@@ -234,6 +283,7 @@ function bindButtons() {
 
 // ---------- 启动 ----------
 
+buildDial();
 bindTabs();
 bindButtons();
 

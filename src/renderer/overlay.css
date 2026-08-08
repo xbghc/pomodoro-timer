@@ -1,4 +1,4 @@
-/* 全屏休息遮罩：始终深色柔和，独立于应用主题 */
+/* 全屏休息遮罩：电木黑 + 呼吸光晕（绿=休息中，红=该上发条了） */
 * {
   margin: 0;
   padding: 0;
@@ -9,8 +9,8 @@ body {
   font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
   height: 100vh;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 38%, #232134 0%, #141420 70%);
-  color: #ece9e2;
+  background: #141210;
+  color: #efebe3;
   user-select: none;
   -webkit-user-select: none;
   cursor: default;
@@ -21,159 +21,212 @@ button {
   cursor: pointer;
 }
 
+:focus-visible {
+  outline: 2px solid #6fa37e;
+  outline-offset: 2px;
+}
+
+/* 呼吸光晕：约 8 秒一次的缓慢明暗，引导深呼吸节奏 */
+.breath {
+  position: fixed;
+  left: 50%;
+  top: 44%;
+  width: 88vmin;
+  height: 88vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(111, 163, 126, 0.16) 0%, rgba(111, 163, 126, 0.05) 45%, transparent 68%);
+  animation: breathe 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+body.over .breath {
+  background: radial-gradient(circle, rgba(226, 85, 65, 0.14) 0%, rgba(226, 85, 65, 0.04) 45%, transparent 68%);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.09);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breath {
+    animation: none;
+  }
+}
+
 .ov-wrap {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 26px;
+  gap: 28px;
   padding: 40px;
 }
 
 .ov-title {
-  font-size: 26px;
-  letter-spacing: 10px;
-  color: #a8a4b8;
-  text-indent: 10px;
+  font-family: 'Bahnschrift', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 20px;
+  letter-spacing: 0.9em;
+  text-indent: 0.9em;
+  color: #9dab97;
+}
+
+body.over .ov-title {
+  color: #c9a49b;
 }
 
 .ov-clock {
-  font-size: clamp(90px, 16vw, 190px);
+  font-family: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  font-size: clamp(96px, 17vw, 210px);
   font-weight: 200;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 6px;
+  letter-spacing: 0.04em;
   line-height: 1;
 }
 
 .ov-progress {
-  width: min(420px, 50vw);
-  height: 4px;
-  border-radius: 2px;
-  background: #2e2b3d;
+  width: min(380px, 44vw);
+  height: 2px;
+  background: #2b2723;
   overflow: hidden;
 }
 
 .ov-bar {
   height: 100%;
   width: 100%;
-  border-radius: 2px;
-  background: #55b183;
+  background: #6fa37e;
   transition: width 0.4s linear;
 }
 
 .ov-tip {
-  font-size: 16px;
-  color: #8f8ba0;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  color: #8f887c;
   min-height: 22px;
 }
 
 .ov-dots {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ov-dots .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #2e2b3d;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2b2723;
 }
 
 .ov-dots .dot.filled {
-  background: #e0604a;
+  background: #e25541;
 }
 
+/* 速记：下划线式输入 */
 .note-card {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  align-items: center;
   width: min(520px, 70vw);
 }
 
 .note-card input {
   flex: 1;
-  background: #1d1b29;
-  border: 1px solid #35324a;
-  border-radius: 10px;
-  color: #ece9e2;
-  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #3a352f;
+  color: #efebe3;
+  padding: 10px 2px;
   font-size: 15px;
+  letter-spacing: 0.04em;
   outline: none;
+  text-align: center;
 }
 
 .note-card input:focus {
-  border-color: #6f6a8a;
+  border-bottom-color: #6fa37e;
 }
 
 .note-card input::placeholder {
-  color: #6b6780;
+  color: #6b655c;
 }
 
 .note-btn {
-  background: #2b2840;
-  border: 1px solid #45415e;
-  color: #cfccdd;
-  border-radius: 10px;
-  padding: 0 20px;
-  font-size: 14px;
+  background: none;
+  border: none;
+  color: #8f887c;
+  font-size: 13px;
+  letter-spacing: 0.12em;
   white-space: nowrap;
 }
 
 .note-btn:hover {
-  border-color: #6f6a8a;
+  color: #efebe3;
 }
 
 .note-btn.saved {
-  color: #55b183;
-  border-color: #3a5d4c;
+  color: #6fa37e;
 }
 
 .ov-primary {
-  background: #e0604a;
+  background: #e25541;
   border: none;
-  color: #fff;
-  font-size: 18px;
-  padding: 16px 46px;
-  border-radius: 14px;
+  color: #fffdf9;
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  padding: 16px 48px;
+  border-radius: 10px;
   transition: background 0.15s;
 }
 
 .ov-primary:hover {
-  background: #ea7460;
+  background: #ef6a57;
 }
 
 .ov-bottom {
   display: flex;
-  gap: 26px;
+  gap: 28px;
   align-items: center;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .ov-outline {
   background: transparent;
-  border: 1px solid #45415e;
-  color: #b5b1c6;
-  border-radius: 10px;
+  border: 1px solid #3a352f;
+  color: #b0a99d;
+  border-radius: 8px;
   padding: 9px 20px;
-  font-size: 14px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
 }
 
 .ov-outline:hover {
-  border-color: #6f6a8a;
-  color: #ece9e2;
+  border-color: #6b655c;
+  color: #efebe3;
 }
 
 .ov-ghost {
   background: none;
   border: none;
-  color: #6b6780;
-  font-size: 13px;
+  color: #6b655c;
+  font-size: 12px;
+  letter-spacing: 0.1em;
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 4px;
 }
 
 .ov-ghost:hover {
-  color: #b5b1c6;
+  color: #b0a99d;
 }
 
 /* 副屏：只显示倒计时 */
