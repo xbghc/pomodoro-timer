@@ -1,0 +1,46 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # 覆盖仓库 .npmrc 里的国内镜像：GitHub runner 直连官方源更快
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+      ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 打包 NSIS 安装包
+        run: npx electron-builder --win nsis --publish never
+
+      - name: 上传构建产物（所有触发方式都可下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: PomodoroTimer-Setup
+          path: dist/PomodoroTimer-Setup-*.exe
+
+      - name: 发布 Release（仅 tag 触发）
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/PomodoroTimer-Setup-*.exe
+          generate_release_notes: true
