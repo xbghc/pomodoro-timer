@@ -140,12 +140,25 @@ function main() {
       timer.tick();
       broadcast();
     });
-    nativeTheme.on('updated', () => sendAll('theme', { dark: nativeTheme.shouldUseDarkColors }));
+    nativeTheme.on('updated', () => {
+      sendAll('theme', { dark: nativeTheme.shouldUseDarkColors });
+      updateTitleBar();
+    });
     screen.on('display-added', refreshOverlays);
     screen.on('display-removed', refreshOverlays);
   });
 
   // ---------- 窗口 ----------
+  // 标题栏融入应用主题：隐藏系统标题栏，保留原生窗口按钮（仅 Windows）
+  function titleBarColors() {
+    const dark = nativeTheme.shouldUseDarkColors;
+    return {
+      color: dark ? '#141210' : '#fafaf7',
+      symbolColor: dark ? '#efebe3' : '#201e1b',
+      height: 40,
+    };
+  }
+
   function createMainWindow(show) {
     mainWindow = new BrowserWindow({
       width: 440,
@@ -155,6 +168,10 @@ function main() {
       show,
       icon: assetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
       autoHideMenuBar: true,
+      ...(process.platform === 'win32' && {
+        titleBarStyle: 'hidden',
+        titleBarOverlay: titleBarColors(),
+      }),
       webPreferences: { preload: path.join(__dirname, 'preload.js') },
     });
     mainWindow.removeMenu();
@@ -325,6 +342,13 @@ function main() {
   function applyAutoStart() {
     if (process.platform !== 'win32') return;
     app.setLoginItemSettings({ openAtLogin: !!settings.autoStart, args: ['--hidden'] });
+  }
+
+  function updateTitleBar() {
+    if (process.platform !== 'win32') return;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitleBarOverlay(titleBarColors());
+    }
   }
 
   function pickTimerConfig(s) {

@@ -6,12 +6,36 @@ body {
   overflow: hidden;
 }
 
+/* 页签栏兼作标题栏：可拖拽窗口，右侧为系统窗口按钮预留（Windows WCO） */
 #tabs {
   display: flex;
+  align-items: center;
   gap: 2px;
-  padding: 12px 18px 0;
+  height: 40px;
+  padding-left: 16px;
+  padding-right: calc(100% - env(titlebar-area-width, 100%) + 12px);
   border-bottom: 1px solid var(--hairline);
   background: var(--bg);
+  -webkit-app-region: drag;
+  flex: none;
+}
+
+.app-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--muted);
+  margin-right: 12px;
+}
+
+.app-mark::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
 }
 
 .tab-btn {
@@ -21,8 +45,12 @@ body {
   font-size: 13px;
   letter-spacing: 0.22em;
   text-indent: 0.22em;
-  padding: 8px 14px 10px;
+  padding: 0 14px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
   position: relative;
+  -webkit-app-region: no-drag;
 }
 
 .tab-btn.active {
@@ -34,7 +62,7 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: -1px;
+  bottom: 0;
   width: 18px;
   height: 2px;
   background: var(--red);
