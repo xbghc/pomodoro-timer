@@ -74,13 +74,26 @@ async function saveNote() {
   if (ok) markSaved();
 }
 
+// 随内容自动增高（上限约 6 行，超出内部滚动）
+function growNote() {
+  const el = $('noteInput');
+  el.style.height = 'auto';
+  const border = el.offsetHeight - el.clientHeight; // border-box 下 scrollHeight 不含边框
+  el.style.height = `${Math.min(el.scrollHeight + border, 220)}px`;
+}
+
 $('noteInput').addEventListener('input', () => {
   noteSaved = false;
   $('noteSave').textContent = '保存';
   $('noteSave').classList.remove('saved');
+  growNote();
 });
 $('noteInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') saveNote();
+  // 多行编辑：回车换行，Ctrl/Cmd+回车保存
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    saveNote();
+  }
 });
 $('noteSave').addEventListener('click', saveNote);
 

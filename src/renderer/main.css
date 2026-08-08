@@ -294,6 +294,7 @@ main {
   user-select: text;
   -webkit-user-select: text;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .rec-note.no-note {

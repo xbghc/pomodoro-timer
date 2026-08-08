@@ -131,33 +131,53 @@ body.over .ov-title {
   background: #e25541;
 }
 
-/* 速记：下划线式输入 */
+/* 速记：多行编辑框，随内容增高 */
 .note-card {
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   width: min(520px, 70vw);
 }
 
-.note-card input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid #3a352f;
+.note-card textarea {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #3a352f;
+  border-radius: 10px;
   color: #efebe3;
-  padding: 10px 2px;
+  padding: 12px 14px;
+  font-family: inherit;
   font-size: 15px;
-  letter-spacing: 0.04em;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
   outline: none;
-  text-align: center;
+  resize: none;
+  overflow-y: auto;
 }
 
-.note-card input:focus {
-  border-bottom-color: #6fa37e;
+.note-card textarea:focus {
+  border-color: #6fa37e;
 }
 
-.note-card input::placeholder {
+.note-card textarea::placeholder {
   color: #6b655c;
+}
+
+.note-card textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+.note-card textarea::-webkit-scrollbar-thumb {
+  background: #3a352f;
+  border-radius: 4px;
+}
+
+.note-card textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-card .note-btn {
+  align-self: flex-end;
 }
 
 .note-btn {

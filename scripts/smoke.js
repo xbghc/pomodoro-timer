@@ -78,9 +78,9 @@ async function main() {
   await sleep(800);
   await shot(overlay2, '05-overlay-no-grace.png');
 
-  // 一句话速记
-  await overlay2.fill('#noteInput', '完成了番茄钟状态机和单元测试');
-  await overlay2.press('#noteInput', 'Enter');
+  // 速记（多行编辑框：Ctrl+回车保存）
+  await overlay2.fill('#noteInput', '完成了番茄钟状态机和单元测试\n补充：修掉了类名冲突的布局问题');
+  await overlay2.press('#noteInput', 'Control+Enter');
   await sleep(400);
   await shot(overlay2, '06-overlay-note-saved.png');
 
