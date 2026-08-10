@@ -388,10 +388,13 @@ main {
   margin: -2px 0 4px;
 }
 
-.about {
-  text-align: center;
-  font-size: 11px;
-  letter-spacing: 0.14em;
+.update-hint {
+  font-size: 12px;
   color: var(--muted);
-  margin-top: 22px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.update-hint.ready {
+  color: var(--green);
 }

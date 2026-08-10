@@ -243,6 +243,44 @@ function bindSettings() {
   $('setAutoStart').addEventListener('change', () => saveSettings({ autoStart: $('setAutoStart').checked }));
 }
 
+// ---------- 更新 ----------
+
+let updateState = { status: 'idle', version: '' };
+
+function renderUpdate() {
+  const { status, version } = updateState;
+  const hint = $('updateStatus');
+  const btn = $('btnUpdate');
+  const TEXT = {
+    dev: '开发模式不检查更新',
+    idle: '',
+    checking: '检查中…',
+    none: '已是最新版本',
+    downloading: version ? `发现 v${version}，后台下载中…` : '下载新版本中…',
+    ready: `v${version} 已就绪`,
+    error: '检查失败，将自动重试',
+  };
+  hint.textContent = TEXT[status] ?? '';
+  hint.classList.toggle('ready', status === 'ready');
+  btn.textContent = status === 'ready' ? '重启并更新' : '检查更新';
+  btn.disabled = status === 'dev' || status === 'checking' || status === 'downloading';
+}
+
+function bindUpdate() {
+  $('btnUpdate').addEventListener('click', async () => {
+    if (updateState.status === 'ready') {
+      window.api.installUpdate();
+      return;
+    }
+    updateState = await window.api.checkUpdate();
+    renderUpdate();
+  });
+  window.api.onUpdate((u) => {
+    updateState = u;
+    renderUpdate();
+  });
+}
+
 // ---------- 页签与按钮 ----------
 
 function bindTabs() {
@@ -286,14 +324,18 @@ function bindButtons() {
 buildDial();
 bindTabs();
 bindButtons();
+bindUpdate();
 
-window.api.bootstrap().then(({ state, settings: s, dark }) => {
+window.api.bootstrap().then(({ state, settings: s, dark, version, update }) => {
   settings = s;
   applyTheme(dark);
   fillSettings();
   bindSettings();
   render(state);
   refreshHistory();
+  $('aboutVersion').textContent = `番茄钟 v${version}`;
+  updateState = update;
+  renderUpdate();
 });
 
 window.api.onState(render);

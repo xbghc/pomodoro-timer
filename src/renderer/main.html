@@ -87,7 +87,17 @@
         <h3>系统</h3>
         <label class="row"><span>开机自启（启动到托盘）</span><input id="setAutoStart" type="checkbox" /></label>
       </div>
-      <p class="about">番茄钟 v1.0.0 · 数据仅保存在本机</p>
+      <div class="setting-group">
+        <h3>关于</h3>
+        <div class="row">
+          <span id="aboutVersion">番茄钟</span>
+          <span class="vol-row">
+            <span id="updateStatus" class="update-hint"></span>
+            <button id="btnUpdate" class="chip">检查更新</button>
+          </span>
+        </div>
+        <p class="hint">数据仅保存在本机 · 更新来自 GitHub Releases</p>
+      </div>
     </section>
   </main>
 

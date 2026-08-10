@@ -12,6 +12,7 @@ const {
 } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
+const { autoUpdater } = require('electron-updater');
 const { PomodoroTimer, DEFAULT_CONFIG } = require('./timer-core');
 const { Store } = require('./store');
 
@@ -47,6 +48,8 @@ function main() {
   let quitting = false;
   let lastCompletedId = null;
   let lastTrayMenuKey = '';
+  // dev(未打包)| idle | checking | none(已最新)| downloading | ready | error
+  let updateInfo = { status: app.isPackaged ? 'idle' : 'dev', version: '' };
 
   // ---------- 计时事件 → 历史记录 ----------
   timer.on('work-completed', ({ startedAt, endedAt }) => {
@@ -76,6 +79,8 @@ function main() {
     state: timer.getState(),
     settings,
     dark: nativeTheme.shouldUseDarkColors,
+    version: app.getVersion(),
+    update: updateInfo,
   }));
 
   const commands = {
@@ -116,6 +121,18 @@ function main() {
     return ok;
   });
 
+  ipcMain.handle('check-update', () => {
+    checkForUpdates();
+    return updateInfo;
+  });
+
+  ipcMain.handle('install-update', () => {
+    if (updateInfo.status !== 'ready') return false;
+    // 静默安装并重启；before-quit 会置 quitting，绕过关闭即隐藏的拦截
+    setImmediate(() => autoUpdater.quitAndInstall(true, true));
+    return true;
+  });
+
   // ---------- 生命周期 ----------
   app.on('second-instance', showMainWindow);
   app.on('window-all-closed', () => {
@@ -131,6 +148,7 @@ function main() {
     applyAutoStart();
     createTray();
     createMainWindow(!process.argv.includes('--hidden'));
+    setupUpdater();
 
     setInterval(() => {
       timer.tick();
@@ -147,6 +165,40 @@ function main() {
     screen.on('display-added', refreshOverlays);
     screen.on('display-removed', refreshOverlays);
   });
+
+  // ---------- 自动更新 ----------
+  // 检查/下载全程静默；下载完成后只在设置页和托盘露出「重启并更新」，
+  // 不弹窗打断计时。用户从托盘退出时也会顺手装上（autoInstallOnAppQuit）。
+  function setupUpdater() {
+    if (!app.isPackaged) return; // 开发模式没有 app-update.yml，跳过
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.on('checking-for-update', () => setUpdateStatus('checking'));
+    autoUpdater.on('update-available', (info) => setUpdateStatus('downloading', info.version));
+    autoUpdater.on('update-not-available', () => setUpdateStatus('none'));
+    autoUpdater.on('update-downloaded', (info) => setUpdateStatus('ready', info.version));
+    autoUpdater.on('error', (err) => {
+      // 网络不通/GitHub 访问失败是常态，静默降级，下个周期再试
+      console.error('检查更新失败:', err?.message || err);
+      if (updateInfo.status !== 'ready') setUpdateStatus('error');
+    });
+    setTimeout(checkForUpdates, 10 * 1000); // 避开启动高峰
+    setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
+  }
+
+  function checkForUpdates() {
+    if (!app.isPackaged) return;
+    if (updateInfo.status === 'downloading' || updateInfo.status === 'ready') return;
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
+
+  function setUpdateStatus(status, version) {
+    updateInfo = { status, version: version || updateInfo.version };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update', updateInfo);
+    }
+    updateTray(timer.getState());
+  }
 
   // ---------- 窗口 ----------
   // 标题栏融入应用主题：隐藏系统标题栏，保留原生窗口按钮（仅 Windows）
@@ -264,7 +316,8 @@ function main() {
   function updateTray(state) {
     if (!tray) return;
     tray.setToolTip(trayTooltip(state));
-    const key = `${state.phase}:${state.paused}:${state.graceActive}`;
+    const updateReady = updateInfo.status === 'ready';
+    const key = `${state.phase}:${state.paused}:${state.graceActive}:${updateReady}`;
     if (key === lastTrayMenuKey) return;
     lastTrayMenuKey = key;
 
@@ -287,6 +340,12 @@ function main() {
       items.push({ label: '结束专注', click: () => runCmd('endFocus') });
     }
     items.push({ type: 'separator' });
+    if (updateReady) {
+      items.push({
+        label: `更新到 v${updateInfo.version}（重启生效）`,
+        click: () => setImmediate(() => autoUpdater.quitAndInstall(true, true)),
+      });
+    }
     items.push({ label: '打开主窗口', click: showMainWindow });
     items.push({ label: '退出', click: () => app.quit() });
     tray.setContextMenu(Menu.buildFromTemplate(items));
