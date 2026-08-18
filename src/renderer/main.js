@@ -99,11 +99,18 @@ function applyTheme(dark) {
 // ---------- 计时页渲染 ----------
 
 function render(state) {
+  const prevPhase = lastState?.phase;
   lastState = state;
   const { phase, paused, graceActive, breakType, remainingMs, phaseDurationMs, cycleCount, config } = state;
 
   let label = '空闲';
   let sub = '';
+  if (phase === 'idle' && state.schedule?.enabled) {
+    const sc = state.schedule;
+    if (sc.inWork) sub = `工作时段 · 至 ${sc.blockEnd}`;
+    else if (sc.nextStart) sub = `下一时段 ${sc.nextStart} 自动开始`;
+    else sub = '今日工作时段已结束';
+  }
   if (phase === 'work') {
     label = graceActive ? '收尾中' : paused ? '已暂停' : '专注中';
     sub = graceActive ? '收尾结束后进入休息' : `第 ${Math.min(cycleCount + 1, 99)} 个番茄`;
@@ -129,6 +136,14 @@ function render(state) {
   document.querySelector('.dial-wrap').classList.toggle('paused', paused);
 
   renderDots($('dots'), state);
+
+  // 规划区：空闲/等待开始 → 输入框（进入该状态时带入「下一步规划」）；专注中 → 只读展示
+  const editable = phase === 'idle' || phase === 'breakOver';
+  $('planInput').hidden = !editable;
+  if (editable && phase !== prevPhase) $('planInput').value = state.pendingPlan || '';
+  const showPlan = phase === 'work' && state.plan;
+  $('planLine').hidden = !showPlan;
+  $('planLine').textContent = showPlan ? `规划 · ${state.plan}` : '';
 
   $('btnStart').hidden = !(phase === 'idle' || phase === 'breakOver');
   $('btnPause').hidden = !(phase === 'work' && !graceActive && !paused);
@@ -195,11 +210,20 @@ function renderHistoryTab() {
     mark.textContent = ok ? '完' : '弃';
     mark.title = ok ? '完成' : '放弃';
 
+    const texts = document.createElement('span');
+    texts.className = 'rec-texts';
+    if (r.plan) {
+      const plan = document.createElement('span');
+      plan.className = 'rec-plan';
+      plan.textContent = r.plan;
+      texts.appendChild(plan);
+    }
     const note = document.createElement('span');
     note.className = 'rec-note' + (r.note ? '' : ' no-note');
-    note.textContent = r.note || '未记录';
+    note.textContent = r.note || (r.plan ? '未复盘' : '未记录');
+    texts.appendChild(note);
 
-    li.append(time, mark, note);
+    li.append(time, mark, texts);
     list.appendChild(li);
   }
   $('emptyDay').hidden = recs.length > 0;
@@ -213,6 +237,11 @@ function fillSettings() {
   $('setLong').value = settings.longMin;
   $('setEvery').value = settings.longEvery;
   $('setGrace').value = settings.graceMin;
+  $('setSchedOn').checked = settings.schedule.enabled;
+  settings.schedule.blocks.forEach((b, i) => {
+    $(`schedStart${i}`).value = b.start;
+    $(`schedEnd${i}`).value = b.end;
+  });
   $('setSound').checked = settings.soundOn;
   $('setVolume').value = Math.round(settings.soundVolume * 100);
   $('setTheme').value = settings.theme;
@@ -236,6 +265,21 @@ function bindSettings() {
   numField('setLong', 'longMin');
   numField('setEvery', 'longEvery');
   numField('setGrace', 'graceMin');
+  const saveSchedule = () =>
+    saveSettings({
+      schedule: {
+        enabled: $('setSchedOn').checked,
+        blocks: [0, 1, 2].map((i) => ({
+          start: $(`schedStart${i}`).value,
+          end: $(`schedEnd${i}`).value,
+        })),
+      },
+    });
+  $('setSchedOn').addEventListener('change', saveSchedule);
+  for (let i = 0; i < 3; i++) {
+    $(`schedStart${i}`).addEventListener('change', saveSchedule);
+    $(`schedEnd${i}`).addEventListener('change', saveSchedule);
+  }
   $('setSound').addEventListener('change', () => saveSettings({ soundOn: $('setSound').checked }));
   $('setVolume').addEventListener('change', () => saveSettings({ soundVolume: Number($('setVolume').value) / 100 }));
   $('btnTestSound').addEventListener('click', () => playChime('work-end', Number($('setVolume').value) / 100));
@@ -296,7 +340,10 @@ function bindTabs() {
 }
 
 function bindButtons() {
-  $('btnStart').addEventListener('click', () => window.api.cmd('start'));
+  $('btnStart').addEventListener('click', () => window.api.cmd('start', $('planInput').value));
+  $('planInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') window.api.cmd('start', $('planInput').value);
+  });
   $('btnPause').addEventListener('click', () => window.api.cmd('pause'));
   $('btnResume').addEventListener('click', () => window.api.cmd('resume'));
   $('btnAbandon').addEventListener('click', () => window.api.cmd('abandon'));

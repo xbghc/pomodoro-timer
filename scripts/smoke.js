@@ -23,6 +23,8 @@ const FAST_SETTINGS = {
   soundVolume: 0.5,
   theme: 'dark',
   autoStart: false,
+  // 关闭工作时段模式：避免真实时刻触发自动开始/自动收工，干扰流程断言
+  schedule: { enabled: false },
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -54,8 +56,9 @@ async function main() {
   await sleep(400);
   await shot(mainWin, '01-main-idle.png');
 
-  // 开始番茄 → 专注中
+  // 填写规划并开始番茄 → 专注中（表盘下方显示规划）
   const overlayP1 = app.waitForEvent('window', { timeout: 30000 });
+  await mainWin.fill('#planInput', '实现工作时段调度');
   await mainWin.click('#btnStart');
   await sleep(1500);
   await shot(mainWin, '02-main-work.png');
@@ -78,9 +81,10 @@ async function main() {
   await sleep(800);
   await shot(overlay2, '05-overlay-no-grace.png');
 
-  // 速记（多行编辑框：Ctrl+回车保存）
+  // 复盘 + 下一步规划（Ctrl+回车保存）
   await overlay2.fill('#noteInput', '完成了番茄钟状态机和单元测试\n补充：修掉了类名冲突的布局问题');
-  await overlay2.press('#noteInput', 'Control+Enter');
+  await overlay2.fill('#nextInput', '给设置页补工作时段的界面');
+  await overlay2.press('#nextInput', 'Control+Enter');
   await sleep(400);
   await shot(overlay2, '06-overlay-note-saved.png');
 
@@ -89,7 +93,7 @@ async function main() {
   await sleep(400);
   await shot(overlay2, '07-overlay-break-over.png');
 
-  // 手动开始下一个番茄 → 遮罩关闭
+  // 手动开始下一个番茄 → 遮罩关闭，「下一步规划」自动带入为本番茄规划
   await overlay2.click('#btnStartNext');
   await sleep(1200);
   await shot(mainWin, '08-main-work2.png');

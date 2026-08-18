@@ -131,13 +131,28 @@ body.over .ov-title {
   background: #e25541;
 }
 
-/* 速记：多行编辑框，随内容增高 */
+/* 复盘 + 下一步规划：多行编辑框，随内容增高 */
 .note-card {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
   width: min(520px, 70vw);
+}
+
+.ov-plan {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: #9dab97;
+  overflow-wrap: anywhere;
+  margin-bottom: 2px;
+}
+
+.note-label {
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  color: #6b655c;
+  margin-top: 4px;
 }
 
 .note-card textarea {

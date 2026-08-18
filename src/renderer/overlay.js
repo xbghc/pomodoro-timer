@@ -14,7 +14,8 @@ const mode = new URLSearchParams(location.search).get('mode') || 'primary';
 document.body.classList.add(`mode-${mode}`);
 
 let settings = null;
-let noteSaved = false;
+let dirty = false; // 有未保存的编辑
+let everSaved = false; // 本次休息里保存过（此后允许保存空值 = 清空修正）
 
 function fmt(ms) {
   const total = Math.ceil(ms / 1000);
@@ -50,67 +51,74 @@ function render(state) {
   $('btnGrace').hidden = !(phase === 'break' && !graceUsed);
   $('btnGrace').textContent = `再给 ${config.graceMin} 分钟收尾`;
   $('btnSkip').hidden = phase !== 'break';
+
+  // 写复盘时对照：本番茄开始时的规划
+  $('ovPlan').textContent = state.plan ? `本次规划：${state.plan}` : '';
+  $('ovPlan').hidden = !state.plan;
 }
 
-// 速记：未保存的内容在任何离开动作前先落库
-async function ensureNoteSaved() {
-  const text = $('noteInput').value.trim();
-  if (text && !noteSaved) {
-    await window.api.saveNote(text);
-    markSaved();
+// 保存两个区域：复盘挂到刚完成的番茄，下一步规划留给下个番茄
+async function saveReview() {
+  const note = $('noteInput').value.trim();
+  const next = $('nextInput').value.trim();
+  if (!note && !next && !everSaved) {
+    dirty = false;
+    return;
   }
+  await window.api.saveReview({ note, next });
+  everSaved = true;
+  dirty = false;
+  markSaved();
+}
+
+// 未保存的内容在任何离开动作前先落库
+async function ensureReviewSaved() {
+  if (dirty) await saveReview();
 }
 
 function markSaved() {
-  noteSaved = true;
   $('noteSave').textContent = '已保存 ✓';
   $('noteSave').classList.add('saved');
 }
 
-async function saveNote() {
-  const text = $('noteInput').value.trim();
-  if (!text) return;
-  const ok = await window.api.saveNote(text);
-  if (ok) markSaved();
-}
-
-// 随内容自动增高（上限约 6 行，超出内部滚动）
-function growNote() {
-  const el = $('noteInput');
+// 随内容自动增高（上限约 4 行，超出内部滚动）
+function grow(el) {
   el.style.height = 'auto';
   const border = el.offsetHeight - el.clientHeight; // border-box 下 scrollHeight 不含边框
-  el.style.height = `${Math.min(el.scrollHeight + border, 220)}px`;
+  el.style.height = `${Math.min(el.scrollHeight + border, 160)}px`;
 }
 
-$('noteInput').addEventListener('input', () => {
-  noteSaved = false;
-  $('noteSave').textContent = '保存';
-  $('noteSave').classList.remove('saved');
-  growNote();
-});
-$('noteInput').addEventListener('keydown', (e) => {
-  // 多行编辑：回车换行，Ctrl/Cmd+回车保存
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault();
-    saveNote();
-  }
-});
-$('noteSave').addEventListener('click', saveNote);
+for (const id of ['noteInput', 'nextInput']) {
+  $(id).addEventListener('input', () => {
+    dirty = true;
+    $('noteSave').textContent = '保存（Ctrl+回车）';
+    $('noteSave').classList.remove('saved');
+    grow($(id));
+  });
+  $(id).addEventListener('keydown', (e) => {
+    // 多行编辑：回车换行，Ctrl/Cmd+回车保存
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      saveReview();
+    }
+  });
+}
+$('noteSave').addEventListener('click', saveReview);
 
 $('btnStartNext').addEventListener('click', async () => {
-  await ensureNoteSaved();
+  await ensureReviewSaved();
   window.api.cmd('start');
 });
 $('btnGrace').addEventListener('click', async () => {
-  await ensureNoteSaved();
+  await ensureReviewSaved();
   window.api.cmd('grace');
 });
 $('btnSkip').addEventListener('click', async () => {
-  await ensureNoteSaved();
+  await ensureReviewSaved();
   window.api.cmd('skipBreak');
 });
 $('btnEnd').addEventListener('click', async () => {
-  await ensureNoteSaved();
+  await ensureReviewSaved();
   window.api.cmd('endFocus');
 });
 

@@ -16,8 +16,12 @@
     <div id="dots" class="ov-dots"></div>
 
     <div id="noteCard" class="note-card interactive">
-      <textarea id="noteInput" maxlength="500" rows="2" placeholder="这个番茄做了什么？可跳过；Ctrl+回车保存"></textarea>
-      <button id="noteSave" class="note-btn">保存</button>
+      <div id="ovPlan" class="ov-plan" hidden></div>
+      <label class="note-label" for="noteInput">复盘</label>
+      <textarea id="noteInput" maxlength="500" rows="2" placeholder="这个番茄做了什么？效果如何？可跳过"></textarea>
+      <label class="note-label" for="nextInput">下一步规划</label>
+      <textarea id="nextInput" maxlength="500" rows="2" placeholder="下个番茄做什么？开始时会自动带入"></textarea>
+      <button id="noteSave" class="note-btn">保存（Ctrl+回车）</button>
     </div>
 
     <button id="btnStartNext" class="ov-primary interactive" hidden>开始下一个番茄</button>

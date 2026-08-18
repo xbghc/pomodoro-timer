@@ -15,6 +15,13 @@ const crypto = require('crypto');
 const { autoUpdater } = require('electron-updater');
 const { PomodoroTimer, DEFAULT_CONFIG } = require('./timer-core');
 const { Store } = require('./store');
+const {
+  DEFAULT_SCHEDULE,
+  sanitizeSchedule,
+  isWorkTime,
+  currentBlockEnd,
+  nextStartToday,
+} = require('./schedule');
 
 const DEFAULT_SETTINGS = {
   ...DEFAULT_CONFIG,
@@ -22,6 +29,7 @@ const DEFAULT_SETTINGS = {
   soundVolume: 0.6,
   theme: 'system', // system | dark | light
   autoStart: true,
+  schedule: DEFAULT_SCHEDULE, // 工作时段模式（工作场景定制）
 };
 
 // ---------- 单实例 ----------
@@ -33,7 +41,10 @@ if (!app.requestSingleInstanceLock()) {
 
 function main() {
   const store = new Store(app.getPath('userData'));
+  // 时长等字段沿用「读取宽容」策略（冒烟测试依赖小数加速时长），
+  // 仅 schedule 启动即归一化：老版本升级缺字段或手改损坏时回到安全结构
   let settings = store.loadSettings(DEFAULT_SETTINGS);
+  settings.schedule = sanitizeSchedule(settings.schedule);
 
   // 循环计数按天恢复：跨天则清零
   const runtime = store.loadRuntime();
@@ -41,6 +52,10 @@ function main() {
     config: pickTimerConfig(settings),
     cycleCount: runtime.date === localDate() ? runtime.cycleCount || 0 : 0,
   });
+  // 规划流转：pendingPlan 是「下一步规划」（休息时写下，重启保留），
+  // 任何入口开始番茄时被消费为该番茄的 currentPlan，随完成/放弃写入历史
+  let currentPlan = '';
+  let pendingPlan = typeof runtime.pendingPlan === 'string' ? runtime.pendingPlan : '';
 
   let mainWindow = null;
   let tray = null;
@@ -48,13 +63,21 @@ function main() {
   let quitting = false;
   let lastCompletedId = null;
   let lastTrayMenuKey = '';
+  let wasInWork = null; // 上一 tick 是否处于工作时段（null = 尚未采样，避免启动瞬间误触发）
   // dev(未打包)| idle | checking | none(已最新)| downloading | ready | error
   let updateInfo = { status: app.isPackaged ? 'idle' : 'dev', version: '' };
 
   // ---------- 计时事件 → 历史记录 ----------
   timer.on('work-completed', ({ startedAt, endedAt }) => {
     lastCompletedId = crypto.randomUUID();
-    store.appendRecord({ id: lastCompletedId, startedAt, endedAt, status: 'completed', note: '' });
+    store.appendRecord({
+      id: lastCompletedId,
+      startedAt,
+      endedAt,
+      status: 'completed',
+      plan: currentPlan,
+      note: '',
+    });
     saveRuntime();
     notifyHistoryChanged();
   });
@@ -65,7 +88,14 @@ function main() {
     }
   });
   timer.on('work-abandoned', ({ startedAt, endedAt }) => {
-    store.appendRecord({ id: crypto.randomUUID(), startedAt, endedAt, status: 'abandoned', note: '' });
+    store.appendRecord({
+      id: crypto.randomUUID(),
+      startedAt,
+      endedAt,
+      status: 'abandoned',
+      plan: currentPlan,
+      note: '',
+    });
     saveRuntime();
     notifyHistoryChanged();
   });
@@ -76,27 +106,41 @@ function main() {
 
   // ---------- IPC ----------
   ipcMain.handle('bootstrap', () => ({
-    state: timer.getState(),
+    state: fullState(),
     settings,
     dark: nativeTheme.shouldUseDarkColors,
     version: app.getVersion(),
     update: updateInfo,
   }));
 
+  // 新番茄的规划：主窗口传入输入框文本（可为空），其余入口（托盘/遮罩/自动开始）带入 pendingPlan
+  function consumePlan(explicit) {
+    currentPlan = (typeof explicit === 'string' ? explicit : pendingPlan).trim().slice(0, 500);
+    pendingPlan = '';
+  }
+
   const commands = {
-    start: () => timer.startWork(),
+    start: (arg) => {
+      const ok = timer.startWork();
+      if (ok) consumePlan(arg);
+      return ok;
+    },
     pause: () => timer.pause(),
     resume: () => timer.resume(),
     abandon: () => timer.abandon(),
     grace: () => timer.grace(),
     finishGrace: () => timer.finishGrace(),
-    skipBreak: () => timer.skipBreak(),
+    skipBreak: () => {
+      const ok = timer.skipBreak();
+      if (ok) consumePlan();
+      return ok;
+    },
     endFocus: () => timer.endFocus(),
   };
-  ipcMain.handle('cmd', (_e, name) => {
+  ipcMain.handle('cmd', (_e, name, arg) => {
     const fn = commands[name];
     if (!fn) return false;
-    const ok = fn();
+    const ok = fn(arg);
     saveRuntime();
     broadcast();
     return ok;
@@ -114,11 +158,20 @@ function main() {
     return settings;
   });
 
-  ipcMain.handle('save-note', (_e, text) => {
-    if (!lastCompletedId || typeof text !== 'string' || !text.trim()) return false;
-    const ok = store.updateRecord(lastCompletedId, { note: text.trim().slice(0, 500) });
-    if (ok) notifyHistoryChanged();
-    return ok;
+  // 复盘 note 挂到刚完成的番茄；下一步规划 next 存入 pendingPlan（可清空）
+  ipcMain.handle('save-review', (_e, payload) => {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    const note = typeof p.note === 'string' ? p.note.trim().slice(0, 500) : '';
+    const next = typeof p.next === 'string' ? p.next.trim().slice(0, 500) : '';
+    let ok = false;
+    if (note && lastCompletedId) {
+      ok = store.updateRecord(lastCompletedId, { note });
+      if (ok) notifyHistoryChanged();
+    }
+    pendingPlan = next;
+    saveRuntime();
+    broadcast();
+    return ok || !!next;
   });
 
   ipcMain.handle('check-update', () => {
@@ -150,14 +203,13 @@ function main() {
     createMainWindow(!process.argv.includes('--hidden'));
     setupUpdater();
 
-    setInterval(() => {
+    const tickAll = () => {
       timer.tick();
+      applySchedule();
       broadcast();
-    }, 500);
-    powerMonitor.on('resume', () => {
-      timer.tick();
-      broadcast();
-    });
+    };
+    setInterval(tickAll, 500);
+    powerMonitor.on('resume', tickAll);
     nativeTheme.on('updated', () => {
       sendAll('theme', { dark: nativeTheme.shouldUseDarkColors });
       updateTitleBar();
@@ -317,7 +369,7 @@ function main() {
     if (!tray) return;
     tray.setToolTip(trayTooltip(state));
     const updateReady = updateInfo.status === 'ready';
-    const key = `${state.phase}:${state.paused}:${state.graceActive}:${updateReady}`;
+    const key = `${state.phase}:${state.paused}:${state.graceActive}:${updateReady}:${state.schedule?.nextStart}`;
     if (key === lastTrayMenuKey) return;
     lastTrayMenuKey = key;
 
@@ -366,8 +418,11 @@ function main() {
         return `${state.breakType === 'long' ? '长休息' : '休息'}中 ${fmt(state.remainingMs)}`;
       case 'breakOver':
         return '休息结束，等待开始';
-      default:
+      default: {
+        const sc = state.schedule;
+        if (sc?.enabled && !sc.inWork && sc.nextStart) return `空闲 · ${sc.nextStart} 自动开始`;
         return '空闲';
+      }
     }
   }
 
@@ -375,9 +430,50 @@ function main() {
     return state.phase === 'idle' ? '番茄钟' : `番茄钟 — ${trayStatusLabel(state)}`;
   }
 
+  // ---------- 工作时段调度 ----------
+  // 时钟跨入某段起点且空闲 → 自动开始番茄；时段外「休息结束」不再等待开始 → 直接收为空闲。
+  // 进行中的番茄/休息跨过段终点不打断，自然走完。手动操作不受时段限制。
+  function applySchedule() {
+    const sch = settings.schedule;
+    if (!sch.enabled) {
+      wasInWork = null;
+      return;
+    }
+    const inWork = isWorkTime(sch.blocks, new Date());
+    if (wasInWork === false && inWork && timer.phase === 'idle') {
+      if (timer.startWork()) {
+        consumePlan();
+        saveRuntime();
+      }
+    }
+    if (!inWork && timer.phase === 'breakOver') {
+      timer.endFocus();
+      saveRuntime();
+    }
+    wasInWork = inWork;
+  }
+
+  // 计时器状态附加工作时段与规划信息，供渲染层与托盘展示
+  function fullState() {
+    const state = timer.getState();
+    state.plan = currentPlan;
+    state.pendingPlan = pendingPlan;
+    const sch = settings.schedule;
+    const now = new Date();
+    state.schedule = sch.enabled
+      ? {
+          enabled: true,
+          inWork: isWorkTime(sch.blocks, now),
+          blockEnd: currentBlockEnd(sch.blocks, now),
+          nextStart: nextStartToday(sch.blocks, now),
+        }
+      : { enabled: false, inWork: false, blockEnd: null, nextStart: null };
+    return state;
+  }
+
   // ---------- 广播 ----------
   function broadcast() {
-    const state = timer.getState();
+    const state = fullState();
     ensureOverlays(state);
     sendAll('state', state);
     updateTray(state);
@@ -395,7 +491,7 @@ function main() {
 
   // ---------- 杂项 ----------
   function saveRuntime() {
-    store.saveRuntime({ date: localDate(), cycleCount: timer.cycleCount });
+    store.saveRuntime({ date: localDate(), cycleCount: timer.cycleCount, pendingPlan });
   }
 
   function applyAutoStart() {
@@ -435,6 +531,7 @@ function main() {
       soundVolume: Math.min(1, Math.max(0, Number(s.soundVolume) || 0)),
       theme: ['system', 'dark', 'light'].includes(s.theme) ? s.theme : 'system',
       autoStart: !!s.autoStart,
+      schedule: sanitizeSchedule(s.schedule),
     };
   }
 

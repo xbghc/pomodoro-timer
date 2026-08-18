@@ -31,6 +31,8 @@
         </div>
       </div>
       <div id="dots" class="dots"></div>
+      <input id="planInput" class="plan-input" type="text" maxlength="500" placeholder="这个番茄做什么？可留空" />
+      <div id="planLine" class="plan-line" hidden></div>
       <div id="todayLine" class="today-line">今日完成 0 个番茄</div>
       <div class="controls">
         <button id="btnStart" class="btn primary big">开始番茄</button>
@@ -65,6 +67,20 @@
         <label class="row"><span>几个番茄后长休息</span><input id="setEvery" type="number" min="0" max="12" /></label>
         <p class="hint">0 表示不使用长休息</p>
         <label class="row"><span>「收尾」时长</span><input id="setGrace" type="number" min="1" max="15" /></label>
+      </div>
+      <div class="setting-group">
+        <h3>工作时段</h3>
+        <label class="row"><span>按时段自动作息</span><input id="setSchedOn" type="checkbox" /></label>
+        <label class="row"><span>上午</span>
+          <span class="time-row"><input id="schedStart0" type="time" /><span class="time-dash">–</span><input id="schedEnd0" type="time" /></span>
+        </label>
+        <label class="row"><span>下午</span>
+          <span class="time-row"><input id="schedStart1" type="time" /><span class="time-dash">–</span><input id="schedEnd1" type="time" /></span>
+        </label>
+        <label class="row"><span>晚上</span>
+          <span class="time-row"><input id="schedStart2" type="time" /><span class="time-dash">–</span><input id="schedEnd2" type="time" /></span>
+        </label>
+        <p class="hint">时段开始时自动开始番茄；时段结束后不再自动继续，进行中的会正常走完。清空时间可停用该段</p>
       </div>
       <div class="setting-group">
         <h3>提醒</h3>
