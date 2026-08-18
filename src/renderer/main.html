@@ -65,7 +65,7 @@
         <label class="row"><span>短休息</span><input id="setShort" type="number" min="1" max="60" /></label>
         <label class="row"><span>长休息</span><input id="setLong" type="number" min="1" max="120" /></label>
         <label class="row"><span>几个番茄后长休息</span><input id="setEvery" type="number" min="0" max="12" /></label>
-        <p class="hint">0 表示不使用长休息</p>
+        <p class="hint">0 表示不使用长休息；开启工作时段后，这里只用于时段外</p>
         <label class="row"><span>「收尾」时长</span><input id="setGrace" type="number" min="1" max="15" /></label>
       </div>
       <div class="setting-group">
@@ -74,13 +74,31 @@
         <label class="row"><span>上午</span>
           <span class="time-row"><input id="schedStart0" type="time" /><span class="time-dash">–</span><input id="schedEnd0" type="time" /></span>
         </label>
+        <div class="sched-params">
+          <label>工作<input id="schedWork0" type="number" min="1" max="180" /></label>
+          <label>短休<input id="schedShort0" type="number" min="1" max="60" /></label>
+          <label>长休<input id="schedLong0" type="number" min="1" max="120" /></label>
+          <label>间隔<input id="schedEvery0" type="number" min="0" max="12" /></label>
+        </div>
         <label class="row"><span>下午</span>
           <span class="time-row"><input id="schedStart1" type="time" /><span class="time-dash">–</span><input id="schedEnd1" type="time" /></span>
         </label>
+        <div class="sched-params">
+          <label>工作<input id="schedWork1" type="number" min="1" max="180" /></label>
+          <label>短休<input id="schedShort1" type="number" min="1" max="60" /></label>
+          <label>长休<input id="schedLong1" type="number" min="1" max="120" /></label>
+          <label>间隔<input id="schedEvery1" type="number" min="0" max="12" /></label>
+        </div>
         <label class="row"><span>晚上</span>
           <span class="time-row"><input id="schedStart2" type="time" /><span class="time-dash">–</span><input id="schedEnd2" type="time" /></span>
         </label>
-        <p class="hint">时段开始时自动开始番茄；时段结束后不再自动继续，进行中的会正常走完。清空时间可停用该段</p>
+        <div class="sched-params">
+          <label>工作<input id="schedWork2" type="number" min="1" max="180" /></label>
+          <label>短休<input id="schedShort2" type="number" min="1" max="60" /></label>
+          <label>长休<input id="schedLong2" type="number" min="1" max="120" /></label>
+          <label>间隔<input id="schedEvery2" type="number" min="0" max="12" /></label>
+        </div>
+        <p class="hint">每段各用自己的节奏（分钟），「间隔」= 几个番茄后长休息，0 = 该段不用长休。时段开始时自动开始番茄；时段结束后不再自动继续，进行中的会正常走完。清空时间可停用该段</p>
       </div>
       <div class="setting-group">
         <h3>提醒</h3>

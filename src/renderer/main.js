@@ -241,6 +241,10 @@ function fillSettings() {
   settings.schedule.blocks.forEach((b, i) => {
     $(`schedStart${i}`).value = b.start;
     $(`schedEnd${i}`).value = b.end;
+    $(`schedWork${i}`).value = b.workMin;
+    $(`schedShort${i}`).value = b.shortMin;
+    $(`schedLong${i}`).value = b.longMin;
+    $(`schedEvery${i}`).value = b.longEvery;
   });
   $('setSound').checked = settings.soundOn;
   $('setVolume').value = Math.round(settings.soundVolume * 100);
@@ -272,13 +276,18 @@ function bindSettings() {
         blocks: [0, 1, 2].map((i) => ({
           start: $(`schedStart${i}`).value,
           end: $(`schedEnd${i}`).value,
+          workMin: Number($(`schedWork${i}`).value),
+          shortMin: Number($(`schedShort${i}`).value),
+          longMin: Number($(`schedLong${i}`).value),
+          longEvery: Number($(`schedEvery${i}`).value),
         })),
       },
     });
   $('setSchedOn').addEventListener('change', saveSchedule);
   for (let i = 0; i < 3; i++) {
-    $(`schedStart${i}`).addEventListener('change', saveSchedule);
-    $(`schedEnd${i}`).addEventListener('change', saveSchedule);
+    for (const f of ['Start', 'End', 'Work', 'Short', 'Long', 'Every']) {
+      $(`sched${f}${i}`).addEventListener('change', saveSchedule);
+    }
   }
   $('setSound').addEventListener('change', () => saveSettings({ soundOn: $('setSound').checked }));
   $('setVolume').addEventListener('change', () => saveSettings({ soundVolume: Number($('setVolume').value) / 100 }));

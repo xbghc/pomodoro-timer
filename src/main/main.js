@@ -19,6 +19,7 @@ const {
   DEFAULT_SCHEDULE,
   sanitizeSchedule,
   isWorkTime,
+  currentBlock,
   currentBlockEnd,
   nextStartToday,
 } = require('./schedule');
@@ -49,7 +50,7 @@ function main() {
   // 循环计数按天恢复：跨天则清零
   const runtime = store.loadRuntime();
   const timer = new PomodoroTimer({
-    config: pickTimerConfig(settings),
+    config: configForNow(),
     cycleCount: runtime.date === localDate() ? runtime.cycleCount || 0 : 0,
   });
   // 规划流转：pendingPlan 是「下一步规划」（休息时写下，重启保留），
@@ -119,8 +120,28 @@ function main() {
     pendingPlan = '';
   }
 
+  // 当下开始一个番茄该用的节奏：时段内用该段参数，段外/模式关闭用全局「时长」设置。
+  // 番茄开始时快照，进行中不再改（拖堂跨出时段也保持原节奏）。
+  function configForNow() {
+    const sch = settings.schedule;
+    if (sch.enabled) {
+      const b = currentBlock(sch.blocks, new Date());
+      if (b) {
+        return {
+          workMin: b.workMin,
+          shortMin: b.shortMin,
+          longMin: b.longMin,
+          longEvery: b.longEvery,
+          graceMin: settings.graceMin,
+        };
+      }
+    }
+    return pickTimerConfig(settings);
+  }
+
   const commands = {
     start: (arg) => {
+      if (timer.phase === 'idle' || timer.phase === 'breakOver') timer.setConfig(configForNow());
       const ok = timer.startWork();
       if (ok) consumePlan(arg);
       return ok;
@@ -131,6 +152,7 @@ function main() {
     grace: () => timer.grace(),
     finishGrace: () => timer.finishGrace(),
     skipBreak: () => {
+      if (timer.phase === 'break') timer.setConfig(configForNow());
       const ok = timer.skipBreak();
       if (ok) consumePlan();
       return ok;
@@ -151,7 +173,8 @@ function main() {
   ipcMain.handle('save-settings', (_e, patch) => {
     settings = sanitizeSettings({ ...settings, ...patch });
     store.saveSettings(settings);
-    timer.setConfig(pickTimerConfig(settings));
+    // 节奏参数在番茄开始时快照：进行中不打扰，空闲/等待开始时立即生效
+    if (timer.phase === 'idle' || timer.phase === 'breakOver') timer.setConfig(configForNow());
     nativeTheme.themeSource = settings.theme;
     applyAutoStart();
     broadcast();
@@ -206,6 +229,8 @@ function main() {
     const tickAll = () => {
       timer.tick();
       applySchedule();
+      // 空闲/等待开始时跟随当前时段的节奏（表盘时长预览与下次开始都用它）
+      if (timer.phase === 'idle' || timer.phase === 'breakOver') timer.setConfig(configForNow());
       broadcast();
     };
     setInterval(tickAll, 500);
@@ -441,6 +466,7 @@ function main() {
     }
     const inWork = isWorkTime(sch.blocks, new Date());
     if (wasInWork === false && inWork && timer.phase === 'idle') {
+      timer.setConfig(configForNow());
       if (timer.startWork()) {
         consumePlan();
         saveRuntime();
