@@ -5,6 +5,7 @@ const {
   BrowserWindow,
   Tray,
   Menu,
+  Notification,
   nativeTheme,
   ipcMain,
   screen,
@@ -220,6 +221,8 @@ function main() {
   });
 
   app.whenReady().then(() => {
+    // Windows 系统通知的归属标识（与 electron-builder 的 appId 一致）
+    app.setAppUserModelId('com.ghm.pomodoro-timer');
     nativeTheme.themeSource = settings.theme;
     applyAutoStart();
     createTray();
@@ -323,6 +326,9 @@ function main() {
     mainWindow.focus();
   }
 
+  // 不用 fullscreen:true —— Windows 只为「前台」全屏窗口隐藏任务栏，
+  // 通知/输入法等抢走前台的瞬间任务栏会浮回遮罩之上（底部露一条）；
+  // 改为铺满屏幕 bounds 的置顶无边框窗口，并周期重申 z-order（见 assertOverlaysOnTop）
   function createOverlays() {
     const primaryId = screen.getPrimaryDisplay().id;
     for (const display of screen.getAllDisplays()) {
@@ -333,7 +339,6 @@ function main() {
         width: display.bounds.width,
         height: display.bounds.height,
         frame: false,
-        fullscreen: true,
         alwaysOnTop: true,
         skipTaskbar: true,
         resizable: false,
@@ -353,9 +358,21 @@ function main() {
       });
       win.once('ready-to-show', () => {
         win.show();
+        win.setBounds(display.bounds); // 混合 DPI 下再钉一次，防缩放舍入差一条
         if (primary) win.focus();
       });
       overlays.push(win);
+    }
+  }
+
+  // 任务栏也是置顶窗口，和遮罩在同一层竞争 z-order（谁后浮谁在上）。
+  // 遮罩存在期间每次广播重申一次置顶，被顶掉最多半秒内自愈。不动焦点，不影响输入。
+  function assertOverlaysOnTop() {
+    for (const w of overlays) {
+      if (!w.isDestroyed()) {
+        w.setAlwaysOnTop(true, 'screen-saver');
+        w.moveTop();
+      }
     }
   }
 
@@ -471,12 +488,28 @@ function main() {
         consumePlan();
         saveRuntime();
       }
+    } else if (wasInWork === null && inWork && timer.phase === 'idle') {
+      // 启动（或刚打开时段开关）时已在时段内：不悄悄开始番茄，
+      // 发系统通知提醒，把「开工」的决定权留给用户
+      notifyInWork();
     }
     if (!inWork && timer.phase === 'breakOver') {
       timer.endFocus();
       saveRuntime();
     }
     wasInWork = inWork;
+  }
+
+  function notifyInWork() {
+    if (!Notification.isSupported()) return;
+    const end = currentBlockEnd(settings.schedule.blocks, new Date());
+    const n = new Notification({
+      title: '现在是工作时段',
+      body: `本时段至 ${end} 结束，点击打开番茄钟开始一个番茄`,
+      icon: assetPath('icon.png'),
+    });
+    n.on('click', showMainWindow);
+    n.show();
   }
 
   // 计时器状态附加工作时段与规划信息，供渲染层与托盘展示
@@ -501,6 +534,7 @@ function main() {
   function broadcast() {
     const state = fullState();
     ensureOverlays(state);
+    assertOverlaysOnTop();
     sendAll('state', state);
     updateTray(state);
   }
