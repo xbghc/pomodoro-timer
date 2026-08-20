@@ -339,6 +339,7 @@ function main() {
         width: display.bounds.width,
         height: display.bounds.height,
         frame: false,
+        thickFrame: false, // 去掉 Windows DWM 给无边框窗口画的 1px 顶部白线（顺带去阴影/动画）
         alwaysOnTop: true,
         skipTaskbar: true,
         resizable: false,
