@@ -25,6 +25,11 @@ const {
   nextStartToday,
 } = require('./schedule');
 
+// 遮罩提前预建的提前量：Windows 上新建 renderer 进程要数秒（进程冷启动 + Defender 扫描），
+// 到点现建会黑屏卡住整块屏幕。只提前这么点是有意的 —— 工作全程挂着隐藏窗口会被系统换页出去，
+// 到点还得换回来，等于白预建。
+const PREBUILD_MS = 30 * 1000;
+
 const DEFAULT_SETTINGS = {
   ...DEFAULT_CONFIG,
   soundOn: true,
@@ -62,6 +67,9 @@ function main() {
   let mainWindow = null;
   let tray = null;
   let overlays = [];
+  let overlaysShown = false; // 遮罩已显示；预建完成但未到点时为 false
+  const overlayReveal = new Map(); // win → reveal()；有 key 即表示该窗口 ready-to-show 已触发
+  let pendingBreakCue = false; // 休息已开始但遮罩还没就绪，铃声待补发
   let quitting = false;
   let lastCompletedId = null;
   let lastTrayMenuKey = '';
@@ -100,6 +108,12 @@ function main() {
     });
     saveRuntime();
     notifyHistoryChanged();
+  });
+  // 「该休息了」的铃声：遮罩改为提前预建后，renderer 不能再靠 bootstrap 时的 phase 判断
+  // （那时还是 work），改由主进程在真正进入休息时下发
+  timer.on('break-started', () => {
+    pendingBreakCue = true;
+    flushBreakCue();
   });
   timer.on('break-over', () => {
     saveRuntime();
@@ -357,10 +371,20 @@ function main() {
       win.loadFile(path.join(__dirname, '../renderer/overlay.html'), {
         query: { mode: primary ? 'primary' : 'secondary' },
       });
-      win.once('ready-to-show', () => {
+
+      const reveal = () => {
+        if (win.isDestroyed()) return;
+        win.webContents.send('state', fullState()); // 预建期间页面停在占位内容，先喂真实状态
         win.show();
         win.setBounds(display.bounds); // 混合 DPI 下再钉一次，防缩放舍入差一条
         if (primary) win.focus();
+        win.webContents.send('cue', { type: 'shown' }); // 窗口跨休息复用，复盘表单要清空并取回焦点
+      };
+      win.once('ready-to-show', () => {
+        overlayReveal.set(win, reveal);
+        // 到点时预建还没完成：宁可遮罩晚半秒弹出，也不要拿纯色板黑屏占住整块屏幕
+        if (overlaysShown) reveal();
+        flushBreakCue();
       });
       overlays.push(win);
     }
@@ -369,6 +393,7 @@ function main() {
   // 任务栏也是置顶窗口，和遮罩在同一层竞争 z-order（谁后浮谁在上）。
   // 遮罩存在期间每次广播重申一次置顶，被顶掉最多半秒内自愈。不动焦点，不影响输入。
   function assertOverlaysOnTop() {
+    if (!overlaysShown) return; // 预建期间窗口是隐藏的，不参与 z-order 竞争
     for (const w of overlays) {
       if (!w.isDestroyed()) {
         w.setAlwaysOnTop(true, 'screen-saver');
@@ -377,9 +402,35 @@ function main() {
     }
   }
 
+  function showOverlays() {
+    if (overlaysShown) return;
+    overlaysShown = true;
+    for (const win of overlays) {
+      const reveal = overlayReveal.get(win);
+      if (reveal) reveal(); // 尚未就绪的窗口由它自己的 ready-to-show 接手
+    }
+  }
+
+  // 收尾推迟（grace）：遮罩收起但窗口留着，收尾结束再 show，省掉第二次冷启动
+  function hideOverlays() {
+    overlaysShown = false;
+    for (const w of overlays) if (!w.isDestroyed()) w.hide();
+  }
+
   function closeOverlays() {
     for (const w of overlays) if (!w.isDestroyed()) w.destroy();
     overlays = [];
+    overlayReveal.clear();
+    overlaysShown = false;
+  }
+
+  // 铃声得有个加载完的 renderer 才播得出。预建正常时窗口早就绪，直接就发；
+  // 只有 finishGrace 这类「点一下立刻进休息」的路径来不及预建，要等窗口 ready 后补发
+  function flushBreakCue() {
+    if (!pendingBreakCue) return;
+    if (!overlays.some((w) => !w.isDestroyed() && overlayReveal.has(w))) return;
+    pendingBreakCue = false;
+    sendAll('cue', { type: 'break-started' });
   }
 
   function refreshOverlays() {
@@ -389,11 +440,25 @@ function main() {
     }
   }
 
-  // 遮罩窗口与状态对账：休息/等待开始 → 存在；其余 → 关闭
+  // 遮罩窗口与状态对账（三态）：
+  //   休息 / 等待开始      → 窗口存在且显示
+  //   工作末段 / 收尾段中  → 窗口存在但隐藏（预建）
+  //   其余                 → 关闭
+  // 收尾段全程预建：它本就只有几分钟，且「立即去休息」是点了就走，没有提前量可用。
   function ensureOverlays(state) {
-    const want = state.phase === 'break' || state.phase === 'breakOver';
-    if (want && overlays.length === 0) createOverlays();
-    else if (!want && overlays.length > 0) closeOverlays();
+    const show = state.phase === 'break' || state.phase === 'breakOver';
+    const prebuild =
+      state.phase === 'work' &&
+      !state.paused &&
+      (state.graceActive || state.remainingMs <= PREBUILD_MS);
+
+    if (!show && !prebuild) {
+      if (overlays.length > 0) closeOverlays();
+      return;
+    }
+    if (overlays.length === 0) createOverlays();
+    if (show) showOverlays();
+    else if (overlaysShown) hideOverlays();
   }
 
   // ---------- 托盘 ----------

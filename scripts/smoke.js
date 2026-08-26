@@ -19,7 +19,7 @@ const FAST_SETTINGS = {
   longMin: 0.12,
   longEvery: 2,
   graceMin: 0.06,
-  soundOn: false,
+  soundOn: true, // 铃声改由 cue 驱动后需要真的走一遍这条路；无音频设备的异常由探针吞掉
   soundVolume: 0.5,
   theme: 'dark',
   autoStart: false,
@@ -28,6 +28,50 @@ const FAST_SETTINGS = {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 隐藏窗口里 rAF 会被节流，waitForFunction 不可靠；改用 CDP 直通的 evaluate 轮询
+async function waitFor(fn, desc, timeout = 30000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeout) {
+    if (await fn()) return;
+    await sleep(200);
+  }
+  throw new Error(`等待超时：${desc}`);
+}
+
+// X11 下隐藏窗口的 document.visibilityState 照样报 visible，只能问主进程。
+// 按 title 认遮罩：closable/frame 这些窗口属性在 Linux 上没实现，问了也是默认值。
+const OVERLAY_TITLE = '休息一下'; // overlay.html 的 <title>
+const overlayVisible = () =>
+  app.evaluate(
+    ({ BrowserWindow }, title) =>
+      BrowserWindow.getAllWindows().some((w) => w.getTitle() === title && w.isVisible()),
+    OVERLAY_TITLE
+  );
+
+// 遮罩改为提前预建后，铃声不再由 bootstrap 时的 phase 决定，而是主进程下发 cue。
+// 探针挂在 playChime 上，验证「该休息了」「休息结束」两声都真的响过。
+async function installChimeProbe(page) {
+  await page.evaluate(() => {
+    window.__chimes = [];
+    const real = window.playChime;
+    window.playChime = (kind, vol) => {
+      window.__chimes.push(kind);
+      try {
+        return real(kind, vol);
+      } catch {
+        /* xvfb 下没有音频设备，只验证到「铃声被触发」为止 */
+      }
+    };
+  });
+}
+
+const chimes = (page) => page.evaluate(() => window.__chimes || []);
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(`断言失败：${msg}`);
+  console.log('✓', msg);
+}
 
 let app = null;
 
@@ -57,29 +101,44 @@ async function main() {
   await shot(mainWin, '01-main-idle.png');
 
   // 填写规划并开始番茄 → 专注中（表盘下方显示规划）
+  // 此处 window 事件等到的是「预建」的遮罩窗口，不是弹出：加速时长下整个工作段都在预建阈值内
   const overlayP1 = app.waitForEvent('window', { timeout: 30000 });
   await mainWin.fill('#planInput', '实现工作时段调度');
   await mainWin.click('#btnStart');
-  await sleep(1500);
-  await shot(mainWin, '02-main-work.png');
 
-  // 到点 → 全屏休息遮罩
   const overlay1 = await overlayP1;
   await overlay1.waitForLoadState('domcontentloaded');
+  await installChimeProbe(overlay1);
+  // 预建的核心约定：窗口已经建好、页面已加载，但还没占住屏幕
+  assert(!(await overlayVisible()), '专注中：遮罩窗口已预建但保持隐藏');
+  await sleep(1200);
+  await shot(mainWin, '02-main-work.png');
+
+  // 到点 → 遮罩显示（同一个预建窗口，不再新建）
+  await waitFor(overlayVisible, '遮罩显示');
   await sleep(800);
   await shot(overlay1, '03-overlay-break.png');
+  assert((await chimes(overlay1)).includes('work-end'), '进入休息时「该休息了」铃声已响');
 
-  // 收尾推迟：遮罩关闭回到工作
-  const overlayP2 = app.waitForEvent('window', { timeout: 30000 });
+  // 收尾推迟：遮罩收起回到工作，但窗口留着复用
   await overlay1.click('#btnGrace');
-  await sleep(800);
+  await waitFor(async () => !(await overlayVisible()), '遮罩收起');
+  assert(!overlay1.isClosed(), '收尾推迟后遮罩窗口被复用而非销毁');
   await shot(mainWin, '04-main-grace.png');
 
-  // 收尾结束 → 遮罩再次弹出（此时不应再有收尾按钮）
-  const overlay2 = await overlayP2;
-  await overlay2.waitForLoadState('domcontentloaded');
+  // 收尾结束 → 同一窗口再次显示（此时不应再有收尾按钮）
+  const overlay2 = overlay1;
+  await waitFor(overlayVisible, '遮罩再次显示');
   await sleep(800);
   await shot(overlay2, '05-overlay-no-grace.png');
+  assert(
+    await overlay2.evaluate(() => document.getElementById('btnGrace').hidden),
+    '第二次休息不再提供收尾按钮'
+  );
+  assert(
+    await overlay2.evaluate(() => document.getElementById('noteInput').value === ''),
+    '窗口复用后复盘表单已重置'
+  );
 
   // 复盘 + 下一步规划（Ctrl+回车保存）
   await overlay2.fill('#noteInput', '完成了番茄钟状态机和单元测试\n补充：修掉了类名冲突的布局问题');
@@ -92,6 +151,7 @@ async function main() {
   await overlay2.waitForSelector('#btnStartNext:not([hidden])', { timeout: 30000 });
   await sleep(400);
   await shot(overlay2, '07-overlay-break-over.png');
+  assert((await chimes(overlay2)).includes('break-end'), '休息结束时「休息结束」铃声已响');
 
   // 手动开始下一个番茄 → 遮罩关闭，「下一步规划」自动带入为本番茄规划
   await overlay2.click('#btnStartNext');

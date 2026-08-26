@@ -8,6 +8,15 @@ function _ctx() {
   return _audioCtx;
 }
 
+// 预热音频上下文：遮罩提前预建时调用，免得铃声首播时才现建 AudioContext
+function warmAudio() {
+  try {
+    _ctx();
+  } catch {
+    /* 无音频设备的环境下静默降级 */
+  }
+}
+
 // kind: 'work-end'（下行，该休息了）| 'break-end'（上行，休息结束）
 // volume: 0..1
 function playChime(kind, volume = 0.6) {

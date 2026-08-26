@@ -105,6 +105,20 @@ for (const id of ['noteInput', 'nextInput']) {
 }
 $('noteSave').addEventListener('click', saveReview);
 
+// 窗口跨休息复用（预建、以及收尾推迟时的收起再显示），每次显示都回到干净状态
+function resetForm() {
+  dirty = false;
+  everSaved = false;
+  for (const id of ['noteInput', 'nextInput']) {
+    $(id).value = '';
+    grow($(id));
+  }
+  $('noteSave').textContent = '保存（Ctrl+回车）';
+  $('noteSave').classList.remove('saved');
+  $('ovTip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+  if (mode === 'primary') $('noteInput').focus();
+}
+
 $('btnStartNext').addEventListener('click', async () => {
   await ensureReviewSaved();
   window.api.cmd('start');
@@ -124,19 +138,22 @@ $('btnEnd').addEventListener('click', async () => {
 
 $('ovTip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
 
+// 这里可能跑在休息开始前 30 秒（窗口预建、尚未显示），所以铃声和焦点都不在这里做，
+// 交给主进程在真正进入休息 / 真正显示窗口时下发的 cue
 window.api.bootstrap().then(({ state, settings: s }) => {
   settings = s;
   render(state);
-  // 番茄到点的提示音：遮罩弹出即休息开始（只有主屏播放，避免多屏叠音）
-  if (mode === 'primary' && state.phase === 'break' && s.soundOn) {
-    playChime('work-end', s.soundVolume);
-  }
-  if (mode === 'primary') $('noteInput').focus();
+  warmAudio();
 });
 
 window.api.onState(render);
+// 提示音只有主屏播，避免多屏叠音
 window.api.onCue((cue) => {
-  if (cue.type === 'break-over' && mode === 'primary' && settings?.soundOn) {
-    playChime('break-end', settings.soundVolume);
+  if (cue.type === 'shown') {
+    resetForm();
+    return;
   }
+  if (mode !== 'primary' || !settings?.soundOn) return;
+  if (cue.type === 'break-started') playChime('work-end', settings.soundVolume);
+  else if (cue.type === 'break-over') playChime('break-end', settings.soundVolume);
 });
