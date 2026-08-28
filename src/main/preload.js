@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   // 拉取初始状态：{ state, settings, dark }
   bootstrap: () => ipcRenderer.invoke('bootstrap'),
   // 计时命令：start | pause | resume | abandon | grace | finishGrace | skipBreak | endFocus
+  // 遮罩命令：away（暂时让开，遮罩收起一小会儿）| endAway（立即回到休息）
   // start 可带 arg（本番茄的规划文本）
   cmd: (name, arg) => ipcRenderer.invoke('cmd', name, arg),
   getHistory: () => ipcRenderer.invoke('get-history'),

@@ -1,6 +1,6 @@
 {
   "name": "pomodoro-timer",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "番茄钟 —— 到点强制休息的 Windows 桌面番茄钟",
   "main": "src/main/main.js",
   "author": "ghm",

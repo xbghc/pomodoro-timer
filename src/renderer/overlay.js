@@ -127,6 +127,11 @@ $('btnGrace').addEventListener('click', async () => {
   await ensureReviewSaved();
   window.api.cmd('grace');
 });
+// 要去开个音乐 / 回条消息：遮罩整体收起一小会儿，到点自动盖回来，休息倒计时照常走
+$('btnAway').addEventListener('click', async () => {
+  await ensureReviewSaved();
+  window.api.cmd('away');
+});
 $('btnSkip').addEventListener('click', async () => {
   await ensureReviewSaved();
   window.api.cmd('skipBreak');
@@ -140,8 +145,9 @@ $('ovTip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
 
 // 这里可能跑在休息开始前 30 秒（窗口预建、尚未显示），所以铃声和焦点都不在这里做，
 // 交给主进程在真正进入休息 / 真正显示窗口时下发的 cue
-window.api.bootstrap().then(({ state, settings: s }) => {
+window.api.bootstrap().then(({ state, settings: s, awayMs }) => {
   settings = s;
+  if (awayMs) $('btnAway').textContent = `暂时让开 ${Math.round(awayMs / 1000)} 秒`;
   render(state);
   warmAudio();
 });
@@ -151,6 +157,11 @@ window.api.onState(render);
 window.api.onCue((cue) => {
   if (cue.type === 'shown') {
     resetForm();
+    return;
+  }
+  // 让开结束盖回来：还是同一次休息，复盘内容不能清，只把光标要回来
+  if (cue.type === 'back') {
+    if (mode === 'primary') $('noteInput').focus();
     return;
   }
   if (mode !== 'primary' || !settings?.soundOn) return;

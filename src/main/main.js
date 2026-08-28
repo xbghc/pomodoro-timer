@@ -30,6 +30,11 @@ const {
 // 到点还得换回来，等于白预建。
 const PREBUILD_MS = 30 * 1000;
 
+// 「暂时让开」：休息中点一下，遮罩整体收起这么久，够去开个音乐 / 回条消息，到点自动盖回来。
+// 不限次数、不补时长 —— 遮罩上本就摆着更省事的「跳过休息」，让开的摩擦反而更大，
+// 没人会拿它绕过休息；花掉的是休息时间本身，倒计时照常走。
+const AWAY_MS = 30 * 1000;
+
 const DEFAULT_SETTINGS = {
   ...DEFAULT_CONFIG,
   soundOn: true,
@@ -67,9 +72,13 @@ function main() {
   let mainWindow = null;
   let tray = null;
   let overlays = [];
+  let graceWindow = null; // 收尾小窗（右下角挂件）
+  let graceReveal = null; // 小窗的 showInactive()；非 null 即表示 ready-to-show 已触发
+  let graceShown = false; // 小窗已显示；预建完成但没点收尾时为 false
   let overlaysShown = false; // 遮罩已显示；预建完成但未到点时为 false
   const overlayReveal = new Map(); // win → reveal()；有 key 即表示该窗口 ready-to-show 已触发
   let pendingBreakCue = false; // 休息已开始但遮罩还没就绪，铃声待补发
+  let awayUntil = 0; // 「暂时让开」的到期时刻（0 = 不在让开中）；期间遮罩全部收起
   let quitting = false;
   let lastCompletedId = null;
   let lastTrayMenuKey = '';
@@ -127,6 +136,7 @@ function main() {
     dark: nativeTheme.shouldUseDarkColors,
     version: app.getVersion(),
     update: updateInfo,
+    awayMs: AWAY_MS,
   }));
 
   // 新番茄的规划：主窗口传入输入框文本（可为空），其余入口（托盘/遮罩/自动开始）带入 pendingPlan
@@ -173,6 +183,9 @@ function main() {
       return ok;
     },
     endFocus: () => timer.endFocus(),
+    // 只动遮罩、不动计时的窗口命令
+    away: () => startAway(),
+    endAway: () => endAway(),
   };
   ipcMain.handle('cmd', (_e, name, arg) => {
     const fn = commands[name];
@@ -232,6 +245,7 @@ function main() {
   app.on('before-quit', () => {
     quitting = true;
     closeOverlays();
+    closeGraceWindow();
   });
 
   app.whenReady().then(() => {
@@ -256,8 +270,8 @@ function main() {
       sendAll('theme', { dark: nativeTheme.shouldUseDarkColors });
       updateTitleBar();
     });
-    screen.on('display-added', refreshOverlays);
-    screen.on('display-removed', refreshOverlays);
+    screen.on('display-added', refreshWindows);
+    screen.on('display-removed', refreshWindows);
   });
 
   // ---------- 自动更新 ----------
@@ -372,18 +386,19 @@ function main() {
         query: { mode: primary ? 'primary' : 'secondary' },
       });
 
-      const reveal = () => {
+      // fresh = 全新一次休息展示（复盘表单要清空）；从「暂时让开」盖回来时为 false
+      const reveal = (fresh) => {
         if (win.isDestroyed()) return;
         win.webContents.send('state', fullState()); // 预建期间页面停在占位内容，先喂真实状态
         win.show();
         win.setBounds(display.bounds); // 混合 DPI 下再钉一次，防缩放舍入差一条
         if (primary) win.focus();
-        win.webContents.send('cue', { type: 'shown' }); // 窗口跨休息复用，复盘表单要清空并取回焦点
+        win.webContents.send('cue', { type: fresh ? 'shown' : 'back' });
       };
       win.once('ready-to-show', () => {
         overlayReveal.set(win, reveal);
         // 到点时预建还没完成：宁可遮罩晚半秒弹出，也不要拿纯色板黑屏占住整块屏幕
-        if (overlaysShown) reveal();
+        if (overlaysShown) reveal(true);
         flushBreakCue();
       });
       overlays.push(win);
@@ -402,16 +417,38 @@ function main() {
     }
   }
 
+  // 每次广播都会走到这里：让开未到期就原样挡住，到期（或被「立即回到休息」提前置为到期）
+  // 才恢复显示，且带 fresh=false —— 同一次休息的复盘内容不能被清掉
   function showOverlays() {
+    if (awayUntil > Date.now()) return;
+    const backFromAway = awayUntil > 0;
+    awayUntil = 0;
     if (overlaysShown) return;
     overlaysShown = true;
     for (const win of overlays) {
       const reveal = overlayReveal.get(win);
-      if (reveal) reveal(); // 尚未就绪的窗口由它自己的 ready-to-show 接手
+      if (reveal) reveal(!backFromAway); // 尚未就绪的窗口由它自己的 ready-to-show 接手
     }
   }
 
-  // 收尾推迟（grace）：遮罩收起但窗口留着，收尾结束再 show，省掉第二次冷启动
+  // 休息中「暂时让开」：遮罩全部收起，AWAY_MS 后由下一次广播自动盖回
+  function startAway() {
+    if (!overlaysShown) return false;
+    awayUntil = Date.now() + AWAY_MS;
+    hideOverlays();
+    return true;
+  }
+
+  // 提前结束让开：置为「刚好到期」，交给广播走和自然到期完全相同的恢复路径
+  function endAway() {
+    if (awayUntil <= Date.now()) return false;
+    awayUntil = Date.now();
+    return true;
+  }
+
+  const isAway = () => awayUntil > Date.now();
+
+  // 收尾推迟（grace）与「暂时让开」共用：遮罩收起但窗口留着，之后再 show，省掉第二次冷启动
   function hideOverlays() {
     overlaysShown = false;
     for (const w of overlays) if (!w.isDestroyed()) w.hide();
@@ -433,10 +470,15 @@ function main() {
     sendAll('cue', { type: 'break-started' });
   }
 
-  function refreshOverlays() {
+  function refreshWindows() {
+    const state = timer.getState();
     if (overlays.length) {
       closeOverlays();
-      ensureOverlays(timer.getState());
+      ensureOverlays(state);
+    }
+    if (graceWindow) {
+      closeGraceWindow(); // 右下角是按 workArea 算的，显示器一变就得重算
+      ensureGraceWindow(state);
     }
   }
 
@@ -447,6 +489,7 @@ function main() {
   // 收尾段全程预建：它本就只有几分钟，且「立即去休息」是点了就走，没有提前量可用。
   function ensureOverlays(state) {
     const show = state.phase === 'break' || state.phase === 'breakOver';
+    if (!show) awayUntil = 0; // 跳过休息 / 结束专注 / 收尾推迟：让开随休息一起作废
     const prebuild =
       state.phase === 'work' &&
       !state.paused &&
@@ -459,6 +502,81 @@ function main() {
     if (overlays.length === 0) createOverlays();
     if (show) showOverlays();
     else if (overlaysShown) hideOverlays();
+  }
+
+  // ---------- 收尾小窗 ----------
+  // 收尾是「借来的几分钟」，人已经回到自己的工作窗口了，遮罩帮不上忙：
+  // 右下角挂个不抢焦点的小挂件盯着倒计时，随时能一键回到休息。
+  //
+  // 与遮罩同样的三态对账，预建时机却不同：收尾是从遮罩上点出来的，没有「还剩 30 秒」
+  // 这种提前量可用，所以拿 grace() 的可用条件当预建条件 —— 休息一开始就建好挂着，
+  // 点下去立刻现身；本番茄用过收尾（graceUsed）就再也点不出来，也就不必建。
+  function ensureGraceWindow(state) {
+    const show = state.phase === 'work' && state.graceActive;
+    const prebuild = state.phase === 'break' && !state.graceUsed;
+
+    if (!show && !prebuild) {
+      closeGraceWindow();
+      return;
+    }
+    if (!graceWindow) createGraceWindow();
+    if (show) showGraceWindow();
+    else if (graceShown) hideGraceWindow();
+  }
+
+  function showGraceWindow() {
+    if (graceShown) return;
+    graceShown = true;
+    if (graceReveal) graceReveal(); // 还没就绪的窗口由它自己的 ready-to-show 接手
+  }
+
+  function hideGraceWindow() {
+    graceShown = false;
+    if (graceWindow && !graceWindow.isDestroyed()) graceWindow.hide();
+  }
+
+  function createGraceWindow() {
+    const wa = screen.getPrimaryDisplay().workArea; // 用 workArea 而非 bounds：贴右下角但不压任务栏
+    const width = 232;
+    const height = 64;
+    const margin = 16;
+    const win = new BrowserWindow({
+      x: wa.x + wa.width - width - margin,
+      y: wa.y + wa.height - height - margin,
+      width,
+      height,
+      frame: false,
+      thickFrame: false, // 同遮罩：去掉 DWM 给无边框窗口画的 1px 白线
+      alwaysOnTop: true, // 默认 floating 层即可，不用遮罩那种 screen-saver 级别
+      skipTaskbar: true,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      show: false,
+      backgroundColor: '#141210',
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false },
+    });
+    graceWindow = win;
+    win.removeMenu();
+    win.loadFile(path.join(__dirname, '../renderer/grace.html'));
+
+    const reveal = () => {
+      if (win.isDestroyed()) return;
+      win.webContents.send('state', fullState()); // 预建期间页面停在预填值，先喂真实状态
+      win.showInactive(); // 不抢焦点：用户正在收尾手头的活，光标不能被挂件夺走
+    };
+    win.once('ready-to-show', () => {
+      graceReveal = reveal;
+      // 预建没赶上（点收尾点得比窗口加载还快）：就绪即显示
+      if (graceShown) reveal();
+    });
+  }
+
+  function closeGraceWindow() {
+    if (graceWindow && !graceWindow.isDestroyed()) graceWindow.destroy();
+    graceWindow = null;
+    graceReveal = null;
+    graceShown = false;
   }
 
   // ---------- 托盘 ----------
@@ -477,11 +595,13 @@ function main() {
     if (!tray) return;
     tray.setToolTip(trayTooltip(state));
     const updateReady = updateInfo.status === 'ready';
-    const key = `${state.phase}:${state.paused}:${state.graceActive}:${updateReady}:${state.schedule?.nextStart}`;
+    const away = isAway();
+    const key = `${state.phase}:${state.paused}:${state.graceActive}:${updateReady}:${state.schedule?.nextStart}:${away}`;
     if (key === lastTrayMenuKey) return;
     lastTrayMenuKey = key;
 
     const items = [{ label: trayStatusLabel(state), enabled: false }, { type: 'separator' }];
+    if (away) items.push({ label: '立即回到休息', click: () => runCmd('endAway') });
     if (state.phase === 'idle' || state.phase === 'breakOver') {
       items.push({ label: '开始番茄', click: () => runCmd('start') });
     } else if (state.phase === 'work' && state.graceActive) {
@@ -518,6 +638,7 @@ function main() {
   }
 
   function trayStatusLabel(state) {
+    if (isAway()) return '暂时让开中';
     switch (state.phase) {
       case 'work':
         if (state.graceActive) return `收尾中 ${fmt(state.remainingMs)}`;
@@ -535,6 +656,9 @@ function main() {
   }
 
   function trayTooltip(state) {
+    if (isAway()) {
+      return `番茄钟 — 暂时让开，${Math.ceil((awayUntil - Date.now()) / 1000)} 秒后回到休息`;
+    }
     return state.phase === 'idle' ? '番茄钟' : `番茄钟 — ${trayStatusLabel(state)}`;
   }
 
@@ -600,13 +724,14 @@ function main() {
   function broadcast() {
     const state = fullState();
     ensureOverlays(state);
+    ensureGraceWindow(state);
     assertOverlaysOnTop();
     sendAll('state', state);
     updateTray(state);
   }
 
   function sendAll(channel, payload) {
-    for (const w of [mainWindow, ...overlays]) {
+    for (const w of [mainWindow, graceWindow, ...overlays]) {
       if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
     }
   }

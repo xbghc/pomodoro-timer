@@ -12,13 +12,13 @@ const OUT = process.argv[2] || path.join(ROOT, 'smoke-shots');
 // dev 模式下 userData = ~/.config/<package.json name>
 const USER_DATA = path.join(os.homedir(), '.config', 'pomodoro-timer');
 
-// 加速时钟：工作 5.4s / 休息 5.4s / 收尾 3.6s，每 2 个长休息
+// 加速时钟：工作 5.4s / 休息 5.4s / 收尾 7.2s，每 2 个长休息
 const FAST_SETTINGS = {
   workMin: 0.09,
   shortMin: 0.09,
   longMin: 0.12,
   longEvery: 2,
-  graceMin: 0.06,
+  graceMin: 0.12, // 收尾段要够长，好在小窗自然到期前点到它的「去休息」
   soundOn: true, // 铃声改由 cue 驱动后需要真的走一遍这条路；无音频设备的异常由探针吞掉
   soundVolume: 0.5,
   theme: 'dark',
@@ -42,12 +42,23 @@ async function waitFor(fn, desc, timeout = 30000) {
 // X11 下隐藏窗口的 document.visibilityState 照样报 visible，只能问主进程。
 // 按 title 认遮罩：closable/frame 这些窗口属性在 Linux 上没实现，问了也是默认值。
 const OVERLAY_TITLE = '休息一下'; // overlay.html 的 <title>
-const overlayVisible = () =>
+const GRACE_TITLE = '收尾中'; // grace.html 的 <title>
+const windowVisible = (title) =>
   app.evaluate(
-    ({ BrowserWindow }, title) =>
-      BrowserWindow.getAllWindows().some((w) => w.getTitle() === title && w.isVisible()),
-    OVERLAY_TITLE
+    ({ BrowserWindow }, t) =>
+      BrowserWindow.getAllWindows().some((w) => w.getTitle() === t && w.isVisible()),
+    title
   );
+const overlayVisible = () => windowVisible(OVERLAY_TITLE);
+const graceVisible = () => windowVisible(GRACE_TITLE);
+
+// 预建的窗口早于 waitForEvent('window') 的注册时机，只能在已有窗口里按 title 认
+async function pageByTitle(title) {
+  for (const p of app.windows()) {
+    if (!p.isClosed() && (await p.title()) === title) return p;
+  }
+  return null;
+}
 
 // 遮罩改为提前预建后，铃声不再由 bootstrap 时的 phase 决定，而是主进程下发 cue。
 // 探针挂在 playChime 上，验证「该休息了」「休息结束」两声都真的响过。
@@ -120,17 +131,33 @@ async function main() {
   await shot(overlay1, '03-overlay-break.png');
   assert((await chimes(overlay1)).includes('work-end'), '进入休息时「该休息了」铃声已响');
 
-  // 收尾推迟：遮罩收起回到工作，但窗口留着复用
+  // 收尾小窗同样提前预建：休息一开始就建好，但要等点了「收尾」才现身
+  let gracePage = null;
+  await waitFor(async () => (gracePage = await pageByTitle(GRACE_TITLE)), '收尾小窗已预建');
+  await gracePage.waitForLoadState('domcontentloaded');
+  assert(!(await graceVisible()), '休息中：收尾小窗已预建但保持隐藏');
+
+  // 收尾推迟：遮罩收起回到工作，右下角换成收尾小窗
   await overlay1.click('#btnGrace');
   await waitFor(async () => !(await overlayVisible()), '遮罩收起');
   assert(!overlay1.isClosed(), '收尾推迟后遮罩窗口被复用而非销毁');
+  await waitFor(graceVisible, '收尾小窗显示');
+  assert(!gracePage.isClosed(), '显示的是预建那个小窗，不是现建');
+  await sleep(600);
   await shot(mainWin, '04-main-grace.png');
+  await shot(gracePage, '05-grace-widget.png');
+  assert(
+    await gracePage.evaluate(() => /^\d\d:\d\d$/.test(document.getElementById('clock').textContent)),
+    '收尾小窗显示倒计时'
+  );
 
-  // 收尾结束 → 同一窗口再次显示（此时不应再有收尾按钮）
+  // 小窗的「去休息」= 不等收尾走完，直接进休息（复用主窗口/托盘那条 finishGrace）
   const overlay2 = overlay1;
-  await waitFor(overlayVisible, '遮罩再次显示');
+  await gracePage.click('#btnBreak');
+  await waitFor(overlayVisible, '小窗「去休息」直接进入休息');
+  assert(!(await graceVisible()), '进入休息后收尾小窗关闭');
   await sleep(800);
-  await shot(overlay2, '05-overlay-no-grace.png');
+  await shot(overlay2, '06-overlay-no-grace.png');
   assert(
     await overlay2.evaluate(() => document.getElementById('btnGrace').hidden),
     '第二次休息不再提供收尾按钮'
@@ -139,43 +166,61 @@ async function main() {
     await overlay2.evaluate(() => document.getElementById('noteInput').value === ''),
     '窗口复用后复盘表单已重置'
   );
+  assert(
+    (await pageByTitle(GRACE_TITLE)) === null,
+    '本番茄已用过收尾，第二次休息不再预建小窗'
+  );
+
+  // 「暂时让开」：遮罩整体收起去开个音乐，期间不会被 500ms 广播拽回来；
+  // 提前结束后原样盖回，同一次休息里写了一半的复盘不能丢
+  await overlay2.fill('#noteInput', '让开前写了一半');
+  await overlay2.click('#btnAway');
+  await waitFor(async () => !(await overlayVisible()), '暂时让开后遮罩收起');
+  await sleep(1200);
+  assert(!(await overlayVisible()), '让开期间遮罩不被周期广播重新盖上');
+  await overlay2.evaluate(() => window.api.cmd('endAway'));
+  await waitFor(overlayVisible, '让开结束后遮罩盖回');
+  assert(
+    await overlay2.evaluate(() => document.getElementById('noteInput').value === '让开前写了一半'),
+    '让开回来后复盘内容保留（不当作新一次休息重置）'
+  );
 
   // 复盘 + 下一步规划（Ctrl+回车保存）
   await overlay2.fill('#noteInput', '完成了番茄钟状态机和单元测试\n补充：修掉了类名冲突的布局问题');
   await overlay2.fill('#nextInput', '给设置页补工作时段的界面');
   await overlay2.press('#nextInput', 'Control+Enter');
   await sleep(400);
-  await shot(overlay2, '06-overlay-note-saved.png');
+  await shot(overlay2, '07-overlay-note-saved.png');
 
   // 休息结束 → 遮罩停留等手动开始
   await overlay2.waitForSelector('#btnStartNext:not([hidden])', { timeout: 30000 });
   await sleep(400);
-  await shot(overlay2, '07-overlay-break-over.png');
+  await shot(overlay2, '08-overlay-break-over.png');
   assert((await chimes(overlay2)).includes('break-end'), '休息结束时「休息结束」铃声已响');
 
   // 手动开始下一个番茄 → 遮罩关闭，「下一步规划」自动带入为本番茄规划
   await overlay2.click('#btnStartNext');
   await sleep(1200);
-  await shot(mainWin, '08-main-work2.png');
+  await shot(mainWin, '09-main-work2.png');
 
   // 结束专注（第 2 个番茄记为放弃）→ 历史页应有 1 完成 + 1 放弃
   await mainWin.click('#btnEndFocus');
   await sleep(600);
   await mainWin.click('[data-tab="history"]');
   await sleep(600);
-  await shot(mainWin, '09-history.png');
+  await shot(mainWin, '10-history.png');
 
   await mainWin.click('[data-tab="settings"]');
   await sleep(400);
-  await shot(mainWin, '10-settings.png');
+  await shot(mainWin, '11-settings.png');
 
   // 切浅色主题验证配色变量
   await mainWin.selectOption('#setTheme', 'light');
   await sleep(600);
-  await shot(mainWin, '11-settings-light.png');
+  await shot(mainWin, '12-settings-light.png');
   await mainWin.click('[data-tab="history"]');
   await sleep(400);
-  await shot(mainWin, '12-history-light.png');
+  await shot(mainWin, '13-history-light.png');
 
   await app.close();
   console.log('完成，截图在:', OUT);
