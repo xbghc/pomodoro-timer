@@ -63,6 +63,9 @@ function fmt(ms) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// 休息相关的读数一律只报分钟、向上取整：跳秒的数字太抢眼，休息时不该盯着它
+const mins = (ms) => Math.max(1, Math.ceil(ms / 60000));
+
 function fmtClock(ts) {
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -101,7 +104,7 @@ function applyTheme(dark) {
 function render(state) {
   const prevPhase = lastState?.phase;
   lastState = state;
-  const { phase, paused, graceActive, breakType, remainingMs, phaseDurationMs, cycleCount, config } = state;
+  const { phase, paused, breakType, remainingMs, phaseDurationMs, cycleCount, config } = state;
 
   let label = '空闲';
   let sub = '';
@@ -112,8 +115,11 @@ function render(state) {
     else sub = '今日工作时段已结束';
   }
   if (phase === 'work') {
-    label = graceActive ? '收尾中' : paused ? '已暂停' : '专注中';
-    sub = graceActive ? '收尾结束后进入休息' : `第 ${Math.min(cycleCount + 1, 99)} 个番茄`;
+    label = paused ? '已暂停' : '专注中';
+    sub = `第 ${Math.min(cycleCount + 1, 99)} 个番茄`;
+  } else if (phase === 'breakDue') {
+    label = '该休息了';
+    sub = `已连续工作 ${mins(state.workedMs)} 分钟`;
   } else if (phase === 'break') {
     label = breakType === 'long' ? '长休息' : '短休息';
     sub = '正在休息';
@@ -123,16 +129,24 @@ function render(state) {
   }
   $('phaseLabel').textContent = label;
   $('subLabel').textContent = sub;
+  // 拖过头了就把状态标签染红，和右下角小窗一个信号
+  $('phaseLabel').dataset.overwork = phase === 'breakDue' ? state.overwork : 0;
 
-  $('clock').textContent =
-    phase === 'idle' ? `${config.workMin}:00`.padStart(5, '0') : fmt(remainingMs);
+  // 休息（含「该休息了」时预告的休息时长）只报分钟；工作/空闲仍是 mm:ss
+  const restish = phase === 'break' || phase === 'breakDue';
+  $('clockUnit').hidden = !restish;
+  $('clock').textContent = restish
+    ? String(mins(remainingMs))
+    : phase === 'idle'
+      ? `${config.workMin}:00`.padStart(5, '0')
+      : fmt(remainingMs);
 
   const arc = $('dialArc');
   const displayMs = phase === 'idle' ? config.workMin * 60000 : remainingMs;
   const scaleMin = Math.max(60, Math.ceil((phase === 'idle' ? config.workMin * 60000 : phaseDurationMs) / 60000));
   arc.setAttribute('d', dialArcPath(displayMs, scaleMin));
   arc.classList.toggle('idle', phase === 'idle');
-  arc.classList.toggle('rest', phase === 'break' || phase === 'breakOver');
+  arc.classList.toggle('rest', restish || phase === 'breakOver');
   document.querySelector('.dial-wrap').classList.toggle('paused', paused);
 
   renderDots($('dots'), state);
@@ -146,10 +160,10 @@ function render(state) {
   $('planLine').textContent = showPlan ? `规划 · ${state.plan}` : '';
 
   $('btnStart').hidden = !(phase === 'idle' || phase === 'breakOver');
-  $('btnPause').hidden = !(phase === 'work' && !graceActive && !paused);
-  $('btnResume').hidden = !(phase === 'work' && !graceActive && paused);
-  $('btnAbandon').hidden = !(phase === 'work' && !graceActive);
-  $('btnFinishGrace').hidden = !(phase === 'work' && graceActive);
+  $('btnPause').hidden = !(phase === 'work' && !paused);
+  $('btnResume').hidden = !(phase === 'work' && paused);
+  $('btnAbandon').hidden = phase !== 'work';
+  $('btnStartBreak').hidden = phase !== 'breakDue';
   $('btnEndFocus').hidden = phase === 'idle';
 }
 
@@ -236,7 +250,7 @@ function fillSettings() {
   $('setShort').value = settings.shortMin;
   $('setLong').value = settings.longMin;
   $('setEvery').value = settings.longEvery;
-  $('setGrace').value = settings.graceMin;
+  $('setHealth').value = settings.healthMaxMin;
   $('setSchedOn').checked = settings.schedule.enabled;
   settings.schedule.blocks.forEach((b, i) => {
     $(`schedStart${i}`).value = b.start;
@@ -268,7 +282,7 @@ function bindSettings() {
   numField('setShort', 'shortMin');
   numField('setLong', 'longMin');
   numField('setEvery', 'longEvery');
-  numField('setGrace', 'graceMin');
+  numField('setHealth', 'healthMaxMin');
   const saveSchedule = () =>
     saveSettings({
       schedule: {
@@ -356,7 +370,7 @@ function bindButtons() {
   $('btnPause').addEventListener('click', () => window.api.cmd('pause'));
   $('btnResume').addEventListener('click', () => window.api.cmd('resume'));
   $('btnAbandon').addEventListener('click', () => window.api.cmd('abandon'));
-  $('btnFinishGrace').addEventListener('click', () => window.api.cmd('finishGrace'));
+  $('btnStartBreak').addEventListener('click', () => window.api.cmd('startBreak'));
   $('btnEndFocus').addEventListener('click', () => window.api.cmd('endFocus'));
 
   $('datePrev').addEventListener('click', () => {

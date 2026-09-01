@@ -1,0 +1,94 @@
+/* 「该休息了」小挂件：右下角常驻，配色沿用休息遮罩的电木黑。
+   连续工作越久越红：绿 → 琥珀 → 红，由 body[data-overwork] 切换 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  --accent: #6fa37e;
+  --accent-hover: #82b891;
+  --edge: #3a352f;
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  background: #141210;
+  color: #efebe3;
+  border: 1px solid var(--edge); /* 无边框窗口贴在深色桌面上，靠这条线分出边界 */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  display: flex;
+  -webkit-app-region: drag; /* 挡住视线时整块拖走 */
+  transition: border-color 0.6s;
+}
+
+/* 接近健康上限 */
+body[data-overwork='1'] {
+  --accent: #d99a3e;
+  --accent-hover: #e8ab50;
+  --edge: #6b5330;
+}
+
+/* 已超健康上限：边框也跟着红，余光里就能察觉 */
+body[data-overwork='2'] {
+  --accent: #e25541;
+  --accent-hover: #ef6a57;
+  --edge: #7a3328;
+}
+
+.card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.texts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.title {
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  color: var(--accent);
+  transition: color 0.6s;
+}
+
+.sub {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8f887c;
+  white-space: nowrap;
+}
+
+.btn {
+  -webkit-app-region: no-drag; /* 拖动区里的按钮收不到鼠标事件，必须单独排除 */
+  background: var(--accent);
+  border: none;
+  border-radius: 7px;
+  color: #16130f;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  padding: 9px 15px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: var(--accent-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

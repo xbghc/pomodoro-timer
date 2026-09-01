@@ -25,9 +25,10 @@ const {
   nextStartToday,
 } = require('./schedule');
 
-// 遮罩提前预建的提前量：Windows 上新建 renderer 进程要数秒（进程冷启动 + Defender 扫描），
+// 窗口提前预建的提前量：Windows 上新建 renderer 进程要数秒（进程冷启动 + Defender 扫描），
 // 到点现建会黑屏卡住整块屏幕。只提前这么点是有意的 —— 工作全程挂着隐藏窗口会被系统换页出去，
-// 到点还得换回来，等于白预建。
+// 到点还得换回来，等于白预建。番茄末段一并把「该休息了」小窗和遮罩都建好：
+// 小窗到点即现身，遮罩则一路隐藏着等人点「去休息」。
 const PREBUILD_MS = 30 * 1000;
 
 // 「暂时让开」：休息中点一下，遮罩整体收起这么久，够去开个音乐 / 回条消息，到点自动盖回来。
@@ -72,12 +73,12 @@ function main() {
   let mainWindow = null;
   let tray = null;
   let overlays = [];
-  let graceWindow = null; // 收尾小窗（右下角挂件）
-  let graceReveal = null; // 小窗的 showInactive()；非 null 即表示 ready-to-show 已触发
-  let graceShown = false; // 小窗已显示；预建完成但没点收尾时为 false
+  let dueWindow = null; // 「该休息了」小窗（右下角挂件）
+  let dueReveal = null; // 小窗的 showInactive()；非 null 即表示 ready-to-show 已触发
+  let dueShown = false; // 小窗已显示；预建完成但番茄还没到点时为 false
   let overlaysShown = false; // 遮罩已显示；预建完成但未到点时为 false
   const overlayReveal = new Map(); // win → reveal()；有 key 即表示该窗口 ready-to-show 已触发
-  let pendingBreakCue = false; // 休息已开始但遮罩还没就绪，铃声待补发
+  let pendingBreakCue = false; // 番茄已到点但小窗还没就绪，铃声待补发
   let awayUntil = 0; // 「暂时让开」的到期时刻（0 = 不在让开中）；期间遮罩全部收起
   let quitting = false;
   let lastCompletedId = null;
@@ -100,12 +101,6 @@ function main() {
     saveRuntime();
     notifyHistoryChanged();
   });
-  timer.on('work-extended', ({ endedAt }) => {
-    if (lastCompletedId) {
-      store.updateRecord(lastCompletedId, { endedAt });
-      notifyHistoryChanged();
-    }
-  });
   timer.on('work-abandoned', ({ startedAt, endedAt }) => {
     store.appendRecord({
       id: crypto.randomUUID(),
@@ -118,9 +113,9 @@ function main() {
     saveRuntime();
     notifyHistoryChanged();
   });
-  // 「该休息了」的铃声：遮罩改为提前预建后，renderer 不能再靠 bootstrap 时的 phase 判断
-  // （那时还是 work），改由主进程在真正进入休息时下发
-  timer.on('break-started', () => {
+  // 「该休息了」的铃声：窗口都是提前预建的，renderer 不能靠 bootstrap 时的 phase 判断
+  // （那时还是 work），改由主进程在番茄到点时下发
+  timer.on('break-due', () => {
     pendingBreakCue = true;
     flushBreakCue();
   });
@@ -157,7 +152,7 @@ function main() {
           shortMin: b.shortMin,
           longMin: b.longMin,
           longEvery: b.longEvery,
-          graceMin: settings.graceMin,
+          healthMaxMin: settings.healthMaxMin, // 健康上限是身体的事，不随时段变
         };
       }
     }
@@ -174,10 +169,10 @@ function main() {
     pause: () => timer.pause(),
     resume: () => timer.resume(),
     abandon: () => timer.abandon(),
-    grace: () => timer.grace(),
-    finishGrace: () => timer.finishGrace(),
+    // 「该休息了」→ 真正进入休息（休息时长按实际工作时长在状态机里算好）
+    startBreak: () => timer.startBreak(),
     skipBreak: () => {
-      if (timer.phase === 'break') timer.setConfig(configForNow());
+      if (timer.phase === 'break' || timer.phase === 'breakDue') timer.setConfig(configForNow());
       const ok = timer.skipBreak();
       if (ok) consumePlan();
       return ok;
@@ -245,7 +240,7 @@ function main() {
   app.on('before-quit', () => {
     quitting = true;
     closeOverlays();
-    closeGraceWindow();
+    closeDueWindow();
   });
 
   app.whenReady().then(() => {
@@ -399,7 +394,6 @@ function main() {
         overlayReveal.set(win, reveal);
         // 到点时预建还没完成：宁可遮罩晚半秒弹出，也不要拿纯色板黑屏占住整块屏幕
         if (overlaysShown) reveal(true);
-        flushBreakCue();
       });
       overlays.push(win);
     }
@@ -448,7 +442,7 @@ function main() {
 
   const isAway = () => awayUntil > Date.now();
 
-  // 收尾推迟（grace）与「暂时让开」共用：遮罩收起但窗口留着，之后再 show，省掉第二次冷启动
+  // 「暂时让开」用：遮罩收起但窗口留着，之后再 show，省掉第二次冷启动
   function hideOverlays() {
     overlaysShown = false;
     for (const w of overlays) if (!w.isDestroyed()) w.hide();
@@ -461,13 +455,13 @@ function main() {
     overlaysShown = false;
   }
 
-  // 铃声得有个加载完的 renderer 才播得出。预建正常时窗口早就绪，直接就发；
-  // 只有 finishGrace 这类「点一下立刻进休息」的路径来不及预建，要等窗口 ready 后补发
+  // 铃声得有个加载完的 renderer 才播得出，而「该休息了」这一声归小窗播。
+  // 预建正常时它早就绪，直接就发；没赶上就等它 ready-to-show 时补发。
   function flushBreakCue() {
     if (!pendingBreakCue) return;
-    if (!overlays.some((w) => !w.isDestroyed() && overlayReveal.has(w))) return;
+    if (!dueReveal) return;
     pendingBreakCue = false;
-    sendAll('cue', { type: 'break-started' });
+    sendAll('cue', { type: 'break-due' });
   }
 
   function refreshWindows() {
@@ -476,24 +470,24 @@ function main() {
       closeOverlays();
       ensureOverlays(state);
     }
-    if (graceWindow) {
-      closeGraceWindow(); // 右下角是按 workArea 算的，显示器一变就得重算
-      ensureGraceWindow(state);
+    if (dueWindow) {
+      closeDueWindow(); // 右下角是按 workArea 算的，显示器一变就得重算
+      ensureDueWindow(state);
     }
   }
 
   // 遮罩窗口与状态对账（三态）：
   //   休息 / 等待开始      → 窗口存在且显示
-  //   工作末段 / 收尾段中  → 窗口存在但隐藏（预建）
+  //   工作末段 / 该休息了  → 窗口存在但隐藏（预建）
   //   其余                 → 关闭
-  // 收尾段全程预建：它本就只有几分钟，且「立即去休息」是点了就走，没有提前量可用。
+  // breakDue 全程保持预建：那声「去休息」是点了就要盖上的，没有提前量可用。
+  // 代价是人一直拖着不休息时，隐藏窗口可能被系统换页出去 —— 顶多慢半拍，比黑屏强。
   function ensureOverlays(state) {
     const show = state.phase === 'break' || state.phase === 'breakOver';
-    if (!show) awayUntil = 0; // 跳过休息 / 结束专注 / 收尾推迟：让开随休息一起作废
+    if (!show) awayUntil = 0; // 跳过休息 / 结束专注：让开随休息一起作废
     const prebuild =
-      state.phase === 'work' &&
-      !state.paused &&
-      (state.graceActive || state.remainingMs <= PREBUILD_MS);
+      state.phase === 'breakDue' ||
+      (state.phase === 'work' && !state.paused && state.remainingMs <= PREBUILD_MS);
 
     if (!show && !prebuild) {
       if (overlays.length > 0) closeOverlays();
@@ -504,41 +498,39 @@ function main() {
     else if (overlaysShown) hideOverlays();
   }
 
-  // ---------- 收尾小窗 ----------
-  // 收尾是「借来的几分钟」，人已经回到自己的工作窗口了，遮罩帮不上忙：
-  // 右下角挂个不抢焦点的小挂件盯着倒计时，随时能一键回到休息。
+  // ---------- 「该休息了」小窗 ----------
+  // 番茄到点不再直接盖遮罩：右下角挂个不抢焦点的小挂件说一声「该休息了」，
+  // 点了才进休息。人正打字打到一半时，糊脸的全屏遮罩只会招人烦，反而被跳过。
   //
-  // 与遮罩同样的三态对账，预建时机却不同：收尾是从遮罩上点出来的，没有「还剩 30 秒」
-  // 这种提前量可用，所以拿 grace() 的可用条件当预建条件 —— 休息一开始就建好挂着，
-  // 点下去立刻现身；本番茄用过收尾（graceUsed）就再也点不出来，也就不必建。
-  function ensureGraceWindow(state) {
-    const show = state.phase === 'work' && state.graceActive;
-    const prebuild = state.phase === 'break' && !state.graceUsed;
+  // 与遮罩同样的三态对账，预建时机也一样（番茄末段 PREBUILD_MS）。
+  function ensureDueWindow(state) {
+    const show = state.phase === 'breakDue';
+    const prebuild = state.phase === 'work' && !state.paused && state.remainingMs <= PREBUILD_MS;
 
     if (!show && !prebuild) {
-      closeGraceWindow();
+      closeDueWindow();
       return;
     }
-    if (!graceWindow) createGraceWindow();
-    if (show) showGraceWindow();
-    else if (graceShown) hideGraceWindow();
+    if (!dueWindow) createDueWindow();
+    if (show) showDueWindow();
+    else if (dueShown) hideDueWindow();
   }
 
-  function showGraceWindow() {
-    if (graceShown) return;
-    graceShown = true;
-    if (graceReveal) graceReveal(); // 还没就绪的窗口由它自己的 ready-to-show 接手
+  function showDueWindow() {
+    if (dueShown) return;
+    dueShown = true;
+    if (dueReveal) dueReveal(); // 还没就绪的窗口由它自己的 ready-to-show 接手
   }
 
-  function hideGraceWindow() {
-    graceShown = false;
-    if (graceWindow && !graceWindow.isDestroyed()) graceWindow.hide();
+  function hideDueWindow() {
+    dueShown = false;
+    if (dueWindow && !dueWindow.isDestroyed()) dueWindow.hide();
   }
 
-  function createGraceWindow() {
+  function createDueWindow() {
     const wa = screen.getPrimaryDisplay().workArea; // 用 workArea 而非 bounds：贴右下角但不压任务栏
-    const width = 232;
-    const height = 64;
+    const width = 268;
+    const height = 62;
     const margin = 16;
     const win = new BrowserWindow({
       x: wa.x + wa.width - width - margin,
@@ -556,27 +548,28 @@ function main() {
       backgroundColor: '#141210',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false },
     });
-    graceWindow = win;
+    dueWindow = win;
     win.removeMenu();
-    win.loadFile(path.join(__dirname, '../renderer/grace.html'));
+    win.loadFile(path.join(__dirname, '../renderer/due.html'));
 
     const reveal = () => {
       if (win.isDestroyed()) return;
       win.webContents.send('state', fullState()); // 预建期间页面停在预填值，先喂真实状态
-      win.showInactive(); // 不抢焦点：用户正在收尾手头的活，光标不能被挂件夺走
+      win.showInactive(); // 不抢焦点：人正打着字，光标不能被挂件夺走
     };
     win.once('ready-to-show', () => {
-      graceReveal = reveal;
-      // 预建没赶上（点收尾点得比窗口加载还快）：就绪即显示
-      if (graceShown) reveal();
+      dueReveal = reveal;
+      // 预建没赶上（番茄短到还没建完就到点）：就绪即显示
+      if (dueShown) reveal();
+      flushBreakCue(); // 铃声归这个窗口播，就绪后补上
     });
   }
 
-  function closeGraceWindow() {
-    if (graceWindow && !graceWindow.isDestroyed()) graceWindow.destroy();
-    graceWindow = null;
-    graceReveal = null;
-    graceShown = false;
+  function closeDueWindow() {
+    if (dueWindow && !dueWindow.isDestroyed()) dueWindow.destroy();
+    dueWindow = null;
+    dueReveal = null;
+    dueShown = false;
   }
 
   // ---------- 托盘 ----------
@@ -596,7 +589,7 @@ function main() {
     tray.setToolTip(trayTooltip(state));
     const updateReady = updateInfo.status === 'ready';
     const away = isAway();
-    const key = `${state.phase}:${state.paused}:${state.graceActive}:${updateReady}:${state.schedule?.nextStart}:${away}`;
+    const key = `${state.phase}:${state.paused}:${state.overwork}:${updateReady}:${state.schedule?.nextStart}:${away}`;
     if (key === lastTrayMenuKey) return;
     lastTrayMenuKey = key;
 
@@ -604,8 +597,6 @@ function main() {
     if (away) items.push({ label: '立即回到休息', click: () => runCmd('endAway') });
     if (state.phase === 'idle' || state.phase === 'breakOver') {
       items.push({ label: '开始番茄', click: () => runCmd('start') });
-    } else if (state.phase === 'work' && state.graceActive) {
-      items.push({ label: '立即去休息', click: () => runCmd('finishGrace') });
     } else if (state.phase === 'work') {
       items.push(
         state.paused
@@ -613,6 +604,9 @@ function main() {
           : { label: '暂停', click: () => runCmd('pause') }
       );
       items.push({ label: '放弃本番茄', click: () => runCmd('abandon') });
+    } else if (state.phase === 'breakDue') {
+      items.push({ label: '去休息', click: () => runCmd('startBreak') });
+      items.push({ label: '跳过休息', click: () => runCmd('skipBreak') });
     } else if (state.phase === 'break') {
       items.push({ label: '跳过休息', click: () => runCmd('skipBreak') });
     }
@@ -641,10 +635,14 @@ function main() {
     if (isAway()) return '暂时让开中';
     switch (state.phase) {
       case 'work':
-        if (state.graceActive) return `收尾中 ${fmt(state.remainingMs)}`;
         return state.paused ? `已暂停 ${fmt(state.remainingMs)}` : `专注中 ${fmt(state.remainingMs)}`;
+      case 'breakDue': {
+        const warn = state.overwork === 2 ? '（已超健康上限）' : '';
+        return `该休息了 · 已连续工作 ${mins(state.workedMs)} 分钟${warn}`;
+      }
       case 'break':
-        return `${state.breakType === 'long' ? '长休息' : '休息'}中 ${fmt(state.remainingMs)}`;
+        // 休息中一律按分钟报，跳秒的数字在托盘上一样惹眼
+        return `${state.breakType === 'long' ? '长休息' : '休息'}中 还剩 ${mins(state.remainingMs)} 分钟`;
       case 'breakOver':
         return '休息结束，等待开始';
       default: {
@@ -724,14 +722,14 @@ function main() {
   function broadcast() {
     const state = fullState();
     ensureOverlays(state);
-    ensureGraceWindow(state);
+    ensureDueWindow(state);
     assertOverlaysOnTop();
     sendAll('state', state);
     updateTray(state);
   }
 
   function sendAll(channel, payload) {
-    for (const w of [mainWindow, graceWindow, ...overlays]) {
+    for (const w of [mainWindow, dueWindow, ...overlays]) {
       if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
     }
   }
@@ -763,7 +761,7 @@ function main() {
       shortMin: s.shortMin,
       longMin: s.longMin,
       longEvery: s.longEvery,
-      graceMin: s.graceMin,
+      healthMaxMin: s.healthMaxMin,
     };
   }
 
@@ -777,7 +775,7 @@ function main() {
       shortMin: num(s.shortMin, 1, 60, DEFAULT_SETTINGS.shortMin),
       longMin: num(s.longMin, 1, 120, DEFAULT_SETTINGS.longMin),
       longEvery: num(s.longEvery, 0, 12, DEFAULT_SETTINGS.longEvery),
-      graceMin: num(s.graceMin, 1, 15, DEFAULT_SETTINGS.graceMin),
+      healthMaxMin: num(s.healthMaxMin, 20, 240, DEFAULT_SETTINGS.healthMaxMin),
       soundOn: !!s.soundOn,
       soundVolume: Math.min(1, Math.max(0, Number(s.soundVolume) || 0)),
       theme: ['system', 'dark', 'light'].includes(s.theme) ? s.theme : 'system',
@@ -795,6 +793,11 @@ function main() {
     const m = Math.floor(total / 60);
     const s = total % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // 分钟粒度、向上取整：休息相关的读数一律用它，不给跳秒的数字
+  function mins(ms) {
+    return Math.max(1, Math.ceil(ms / 60000));
   }
 
   function localDate() {

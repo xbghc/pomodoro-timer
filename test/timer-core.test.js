@@ -11,7 +11,7 @@ function setup(config = {}) {
   const clock = { t: 1_000_000 };
   const timer = new PomodoroTimer({ config, now: () => clock.t });
   const events = [];
-  for (const name of ['work-completed', 'work-extended', 'work-abandoned', 'break-started', 'break-over']) {
+  for (const name of ['work-completed', 'work-abandoned', 'break-due', 'break-started', 'break-over']) {
     timer.on(name, (payload) => events.push({ name, ...payload }));
   }
   // 前进 ms 毫秒，模拟宿主每 500ms 一次 tick
@@ -25,7 +25,7 @@ function setup(config = {}) {
   return { timer, clock, events, advance };
 }
 
-test('完整循环：工作→短休息→等待手动开始', () => {
+test('完整循环：工作→该休息了→休息→等待手动开始', () => {
   const { timer, events, advance } = setup();
   assert.equal(timer.getState().phase, 'idle');
 
@@ -35,11 +35,16 @@ test('完整循环：工作→短休息→等待手动开始', () => {
   assert.equal(start.remainingMs, 25 * MIN);
 
   advance(25 * MIN);
-  assert.equal(timer.getState().phase, 'break');
+  assert.equal(timer.getState().phase, 'breakDue', '到点先落到「该休息了」，不直接进休息');
   assert.equal(timer.getState().breakType, 'short');
-  assert.equal(timer.getState().cycleCount, 1);
+  assert.equal(timer.getState().cycleCount, 1, '番茄到点即计入完成');
   const done = events.find((e) => e.name === 'work-completed');
   assert.equal(done.endedAt - done.startedAt, 25 * MIN);
+  assert.ok(events.some((e) => e.name === 'break-due'));
+
+  assert.ok(timer.startBreak());
+  assert.equal(timer.getState().phase, 'break');
+  assert.equal(timer.getState().remainingMs, 5 * MIN);
 
   advance(5 * MIN);
   assert.equal(timer.getState().phase, 'breakOver');
@@ -52,18 +57,30 @@ test('完整循环：工作→短休息→等待手动开始', () => {
   assert.equal(timer.getState().phase, 'work');
 });
 
+test('不强制休息：breakDue 挂多久都不会自己进休息', () => {
+  const { timer, events, advance } = setup();
+  timer.startWork();
+  advance(25 * MIN);
+  advance(3 * 60 * MIN); // 挂了三小时没理它
+  assert.equal(timer.getState().phase, 'breakDue');
+  assert.ok(!events.some((e) => e.name === 'break-started'));
+  assert.equal(events.filter((e) => e.name === 'work-completed').length, 1, '不会重复记完成');
+});
+
 test('每完成 4 个番茄进入长休息，长休息结束循环计数归零', () => {
   const { timer, advance } = setup();
   for (let i = 1; i <= 3; i++) {
     timer.startWork();
     advance(25 * MIN);
     assert.equal(timer.getState().breakType, 'short', `第 ${i} 个应为短休息`);
+    timer.startBreak();
     advance(5 * MIN);
   }
   timer.startWork();
   advance(25 * MIN);
   assert.equal(timer.getState().breakType, 'long');
   assert.equal(timer.getState().cycleCount, 4);
+  timer.startBreak();
   advance(15 * MIN);
   assert.equal(timer.getState().phase, 'breakOver');
   assert.equal(timer.getState().cycleCount, 0);
@@ -79,10 +96,25 @@ test('暂停期间时间不流逝，继续后按剩余时间走完', () => {
   assert.equal(timer.getState().remainingMs, 15 * MIN);
   assert.ok(timer.resume());
   advance(15 * MIN);
-  assert.equal(timer.getState().phase, 'break');
+  assert.equal(timer.getState().phase, 'breakDue');
   // 记录的是真实起止：中间隔了暂停，跨度 10+37+15 分钟
   const done = events.find((e) => e.name === 'work-completed');
   assert.equal(done.endedAt - done.startedAt, 62 * MIN);
+});
+
+test('暂停时长不算进「实际工作时间」，不会误判为拖堂', () => {
+  const { timer, advance } = setup();
+  timer.startWork();
+  advance(10 * MIN);
+  timer.pause();
+  advance(90 * MIN); // 中途去开了个长会
+  assert.equal(timer.getState().workedMs, 10 * MIN, '暂停中工作时长不增长');
+  assert.equal(timer.getState().overwork, 0);
+  timer.resume();
+  advance(15 * MIN);
+  assert.equal(timer.getState().phase, 'breakDue');
+  assert.equal(timer.getState().workedMs, 25 * MIN, '扣掉暂停后正好是计划时长');
+  assert.equal(timer.getState().remainingMs, 5 * MIN, '没有拖堂就按原时长休息');
 });
 
 test('放弃番茄：记为 abandoned，不计入完成数', () => {
@@ -97,65 +129,73 @@ test('放弃番茄：记为 abandoned，不计入完成数', () => {
   assert.ok(!events.some((e) => e.name === 'work-completed'));
 });
 
-test('收尾推迟：休息中 grace 回工作 3 分钟，结束重新进完整休息，不重复计数', () => {
+test('拖堂按比例补休息：多干的时间按 工作:休息 折算加进去', () => {
   const { timer, events, advance } = setup();
   timer.startWork();
   advance(25 * MIN);
-  assert.equal(timer.getState().phase, 'break');
+  assert.equal(timer.getState().remainingMs, 5 * MIN, '刚到点时预告的还是原时长');
 
-  advance(2 * MIN); // 休息了 2 分钟才想起没收尾
-  assert.ok(timer.grace());
-  const g = timer.getState();
-  assert.equal(g.phase, 'work');
-  assert.ok(g.graceActive);
-  assert.ok(g.graceUsed);
-  assert.equal(g.remainingMs, 3 * MIN);
+  advance(10 * MIN); // 拖着又干了 10 分钟
+  const due = timer.getState();
+  assert.equal(due.workedMs, 35 * MIN);
+  // 25:5 = 每工作 5 分钟换 1 分钟休息，多干 10 分钟 → 多休 2 分钟
+  assert.equal(due.remainingMs, 7 * MIN, 'breakDue 里预告的时长随拖堂增长');
 
-  advance(3 * MIN);
-  const s = timer.getState();
-  assert.equal(s.phase, 'break');
-  assert.equal(s.remainingMs, 5 * MIN, '收尾后重新进入完整时长的休息');
-  assert.equal(s.cycleCount, 1, '完成数不能因收尾重复 +1');
-  assert.equal(events.filter((e) => e.name === 'work-completed').length, 1);
-  assert.ok(events.some((e) => e.name === 'work-extended'));
-
-  // 每番茄只能推迟一次
-  assert.equal(timer.grace(), false);
+  timer.startBreak();
+  assert.equal(timer.getState().remainingMs, 7 * MIN);
+  assert.equal(events.find((e) => e.name === 'break-started').durationMs, 7 * MIN);
 });
 
-test('收尾段提前结束：finishGrace 立即进休息', () => {
-  const { timer, events, advance } = setup();
-  timer.startWork();
-  advance(25 * MIN);
-  timer.grace();
-  advance(1 * MIN);
-  assert.ok(timer.finishGrace());
-  assert.equal(timer.getState().phase, 'break');
-  assert.ok(events.some((e) => e.name === 'work-extended'));
-});
-
-test('收尾段不提供暂停/放弃', () => {
+test('拖堂补偿封顶 2 倍：挂机一下午不会换来荒唐的长休息', () => {
   const { timer, advance } = setup();
   timer.startWork();
   advance(25 * MIN);
-  timer.grace();
-  assert.equal(timer.pause(), false);
-  assert.equal(timer.abandon(), false);
+  advance(5 * 60 * MIN);
+  timer.startBreak();
+  assert.equal(timer.getState().remainingMs, 10 * MIN, '短休息最多补到 2 倍');
 });
 
-test('跳过休息：直接开始下一个番茄；跳过长休息同样清零循环计数', () => {
+test('健康上限：超出后 overwork 升到 2，接近时先给 1', () => {
+  const { timer, advance } = setup({ healthMaxMin: 50 });
+  timer.startWork();
+  advance(25 * MIN);
+  assert.equal(timer.getState().overwork, 0, '刚到点还很健康');
+
+  advance(16 * MIN); // 共 41 分钟，过了 50×0.8
+  assert.equal(timer.getState().overwork, 1);
+
+  advance(10 * MIN); // 共 51 分钟，超上限
+  assert.equal(timer.getState().overwork, 2);
+});
+
+test('健康上限低于番茄时长时以番茄时长为准，不会一到点就报红', () => {
+  const { timer, advance } = setup({ workMin: 90, healthMaxMin: 50 });
+  timer.startWork();
+  advance(60 * MIN);
+  assert.equal(timer.getState().overwork, 0, '90 分钟的番茄是用户自己设的，不按 50 分钟报警');
+  advance(30 * MIN);
+  assert.equal(timer.getState().phase, 'breakDue');
+  assert.equal(timer.getState().overwork, 1, '到点时正好在上限边上，先给黄灯');
+  advance(5 * MIN);
+  assert.equal(timer.getState().overwork, 2, '再拖下去才报红');
+});
+
+test('跳过休息：从「该休息了」和休息中都能直接开始下一个番茄', () => {
   const { timer, advance } = setup();
   timer.startWork();
   advance(25 * MIN);
-  assert.ok(timer.skipBreak());
-  const s = timer.getState();
+  assert.ok(timer.skipBreak(), 'breakDue 下可跳过');
+  let s = timer.getState();
   assert.equal(s.phase, 'work');
   assert.equal(s.remainingMs, 25 * MIN);
-  assert.ok(!s.graceUsed, '新番茄的收尾推迟机会要重置');
+
+  advance(25 * MIN);
+  timer.startBreak();
+  advance(1 * MIN);
+  assert.ok(timer.skipBreak(), '休息中也可跳过');
+  assert.equal(timer.getState().phase, 'work');
 
   // 凑到长休息再跳过
-  advance(25 * MIN); // cycle 2
-  timer.skipBreak();
   advance(25 * MIN); // cycle 3
   timer.skipBreak();
   advance(25 * MIN); // cycle 4 → long
@@ -168,6 +208,7 @@ test('结束专注：工作中记放弃并回 idle，循环计数清零', () => 
   const { timer, events, advance } = setup();
   timer.startWork();
   advance(25 * MIN);
+  timer.startBreak();
   advance(5 * MIN);
   timer.startWork(); // 第 2 个
   advance(10 * MIN);
@@ -177,11 +218,18 @@ test('结束专注：工作中记放弃并回 idle，循环计数清零', () => 
   assert.ok(events.some((e) => e.name === 'work-abandoned'));
 });
 
-test('休息中结束专注：无放弃记录，直接回 idle', () => {
+test('「该休息了」/ 休息中结束专注：无放弃记录，直接回 idle', () => {
   const { timer, events, advance } = setup();
   timer.startWork();
   advance(25 * MIN);
-  timer.endFocus();
+  timer.endFocus(); // breakDue 下
+  assert.equal(timer.getState().phase, 'idle');
+  assert.ok(!events.some((e) => e.name === 'work-abandoned'));
+
+  timer.startWork();
+  advance(25 * MIN);
+  timer.startBreak();
+  timer.endFocus(); // break 下
   assert.equal(timer.getState().phase, 'idle');
   assert.ok(!events.some((e) => e.name === 'work-abandoned'));
 });
@@ -197,16 +245,18 @@ test('longEvery=0 时永远不进长休息', () => {
   }
 });
 
-test('机器休眠唤醒：晚到的 tick 用计划时间记账，休息从唤醒时刻起算', () => {
+test('机器休眠唤醒：晚到的 tick 用计划时间记账，停在「该休息了」等人回来', () => {
   const { timer, clock, events } = setup();
   timer.startWork();
   clock.t += 90 * MIN; // 睡死 90 分钟才迎来下一次 tick
   timer.tick();
   const s = timer.getState();
-  assert.equal(s.phase, 'break');
-  assert.equal(s.remainingMs, 5 * MIN, '休息从唤醒时刻开始完整计时');
+  assert.equal(s.phase, 'breakDue', '人不在，休息不空跑');
   const done = events.find((e) => e.name === 'work-completed');
   assert.equal(done.endedAt - done.startedAt, 25 * MIN, '记录按计划结束时间，不含休眠');
+  // 睡过去的 65 分钟会被当成拖堂 → 休息补到封顶
+  timer.startBreak();
+  assert.equal(timer.getState().remainingMs, 10 * MIN);
 });
 
 test('非法状态调用一律返回 false 不抛错', () => {
@@ -214,10 +264,10 @@ test('非法状态调用一律返回 false 不抛错', () => {
   assert.equal(timer.pause(), false);
   assert.equal(timer.resume(), false);
   assert.equal(timer.abandon(), false);
-  assert.equal(timer.grace(), false);
-  assert.equal(timer.finishGrace(), false);
+  assert.equal(timer.startBreak(), false);
   assert.equal(timer.skipBreak(), false);
   assert.equal(timer.endFocus(), false);
   timer.startWork();
   assert.equal(timer.startWork(), false, '工作中不能再次开始');
+  assert.equal(timer.startBreak(), false, '工作中不能直接进休息');
 });

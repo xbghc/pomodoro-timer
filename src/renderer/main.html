@@ -26,7 +26,7 @@
           <path id="dialArc" class="dial-arc" d="" />
         </svg>
         <div class="dial-center">
-          <div id="clock" class="clock numeral">25:00</div>
+          <div class="clock numeral"><span id="clock">25:00</span><span id="clockUnit" class="clock-unit" hidden>分钟</span></div>
           <div id="subLabel" class="sub-label"></div>
         </div>
       </div>
@@ -39,7 +39,7 @@
         <button id="btnPause" class="btn secondary" hidden>暂停</button>
         <button id="btnResume" class="btn primary" hidden>继续</button>
         <button id="btnAbandon" class="btn ghost" hidden>放弃</button>
-        <button id="btnFinishGrace" class="btn primary" hidden>立即去休息</button>
+        <button id="btnStartBreak" class="btn primary" hidden>去休息</button>
       </div>
       <button id="btnEndFocus" class="link-btn" hidden>结束专注</button>
     </section>
@@ -66,7 +66,8 @@
         <label class="row"><span>长休息</span><input id="setLong" type="number" min="1" max="120" /></label>
         <label class="row"><span>几个番茄后长休息</span><input id="setEvery" type="number" min="0" max="12" /></label>
         <p class="hint">0 表示不使用长休息；开启工作时段后，这里只用于时段外</p>
-        <label class="row"><span>「收尾」时长</span><input id="setGrace" type="number" min="1" max="15" /></label>
+        <label class="row"><span>连续工作健康上限</span><input id="setHealth" type="number" min="20" max="240" /></label>
+        <p class="hint">番茄到点后拖着不休息，连续工作时长超过它，「该休息了」的提醒就变红；欠的休息也会按比例补进下一次休息（最多补到 2 倍）</p>
       </div>
       <div class="setting-group">
         <h3>工作时段</h3>

@@ -85,13 +85,33 @@ body.over .ov-title {
   color: #c9a49b;
 }
 
+/* 只跳分钟：大号数字 + 小号「还剩 / 分钟」，视线落点仍在数字上 */
 .ov-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.04em;
   font-family: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
   font-size: clamp(96px, 17vw, 210px);
   font-weight: 200;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
   line-height: 1;
+}
+
+.ov-clock[hidden] {
+  display: none;
+}
+
+.ov-clock-fix {
+  font-size: 0.17em;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  color: #9dab97;
+}
+
+/* 字距造成的尾随空白只在右侧，靠它把两侧观感拉平 */
+.ov-clock-fix:last-child {
+  text-indent: 0.08em;
 }
 
 .ov-progress {

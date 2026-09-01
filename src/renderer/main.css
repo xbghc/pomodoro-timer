@@ -157,11 +157,30 @@ main {
 }
 
 .clock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.12em;
   font-size: 54px;
   font-weight: 300;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   transition: opacity 0.3s;
+}
+
+/* 休息态的「分钟」后缀：数字仍是视线落点，单位退到小字 */
+.clock-unit {
+  font-size: 17px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+/* 「该休息了」拖过头：状态标签跟着右下角小窗一起变色 */
+.phase-label[data-overwork='1'] {
+  color: #c48a2e;
+}
+
+.phase-label[data-overwork='2'] {
+  color: var(--red);
 }
 
 .sub-label {

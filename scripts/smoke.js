@@ -12,13 +12,13 @@ const OUT = process.argv[2] || path.join(ROOT, 'smoke-shots');
 // dev 模式下 userData = ~/.config/<package.json name>
 const USER_DATA = path.join(os.homedir(), '.config', 'pomodoro-timer');
 
-// 加速时钟：工作 5.4s / 休息 5.4s / 收尾 7.2s，每 2 个长休息
+// 加速时钟：工作 5.4s / 休息 5.4s，每 2 个长休息
 const FAST_SETTINGS = {
   workMin: 0.09,
   shortMin: 0.09,
   longMin: 0.12,
   longEvery: 2,
-  graceMin: 0.12, // 收尾段要够长，好在小窗自然到期前点到它的「去休息」
+  healthMaxMin: 0.15, // 拖上几秒就该报红，好验证变色
   soundOn: true, // 铃声改由 cue 驱动后需要真的走一遍这条路；无音频设备的异常由探针吞掉
   soundVolume: 0.5,
   theme: 'dark',
@@ -42,7 +42,7 @@ async function waitFor(fn, desc, timeout = 30000) {
 // X11 下隐藏窗口的 document.visibilityState 照样报 visible，只能问主进程。
 // 按 title 认遮罩：closable/frame 这些窗口属性在 Linux 上没实现，问了也是默认值。
 const OVERLAY_TITLE = '休息一下'; // overlay.html 的 <title>
-const GRACE_TITLE = '收尾中'; // grace.html 的 <title>
+const DUE_TITLE = '该休息了'; // due.html 的 <title>
 const windowVisible = (title) =>
   app.evaluate(
     ({ BrowserWindow }, t) =>
@@ -50,7 +50,7 @@ const windowVisible = (title) =>
     title
   );
 const overlayVisible = () => windowVisible(OVERLAY_TITLE);
-const graceVisible = () => windowVisible(GRACE_TITLE);
+const dueVisible = () => windowVisible(DUE_TITLE);
 
 // 预建的窗口早于 waitForEvent('window') 的注册时机，只能在已有窗口里按 title 认
 async function pageByTitle(title) {
@@ -60,8 +60,8 @@ async function pageByTitle(title) {
   return null;
 }
 
-// 遮罩改为提前预建后，铃声不再由 bootstrap 时的 phase 决定，而是主进程下发 cue。
-// 探针挂在 playChime 上，验证「该休息了」「休息结束」两声都真的响过。
+// 窗口改为提前预建后，铃声不再由 bootstrap 时的 phase 决定，而是主进程下发 cue。
+// 探针挂在 playChime 上：「该休息了」归右下角小窗播，「休息结束」归遮罩播。
 async function installChimeProbe(page) {
   await page.evaluate(() => {
     window.__chimes = [];
@@ -125,50 +125,44 @@ async function main() {
   await sleep(1200);
   await shot(mainWin, '02-main-work.png');
 
-  // 到点 → 遮罩显示（同一个预建窗口，不再新建）
-  await waitFor(overlayVisible, '遮罩显示');
+  // 「该休息了」小窗同样提前预建：番茄末段就建好，到点才现身
+  let duePage = null;
+  await waitFor(async () => (duePage = await pageByTitle(DUE_TITLE)), '「该休息了」小窗已预建');
+  await duePage.waitForLoadState('domcontentloaded');
+  await installChimeProbe(duePage);
+
+  // 到点 → 不再强制盖遮罩，只有右下角小窗现身
+  await waitFor(dueVisible, '番茄到点：「该休息了」小窗显示');
+  assert(!(await overlayVisible()), '到点不强制休息：遮罩仍然藏着，等人点「去休息」');
+  assert(!duePage.isClosed(), '显示的是预建那个小窗，不是现建');
   await sleep(800);
-  await shot(overlay1, '03-overlay-break.png');
-  assert((await chimes(overlay1)).includes('work-end'), '进入休息时「该休息了」铃声已响');
+  await shot(mainWin, '03-main-break-due.png');
+  await shot(duePage, '04-due-widget.png');
+  assert((await chimes(duePage)).includes('work-end'), '到点时「该休息了」铃声已响');
 
-  // 收尾小窗同样提前预建：休息一开始就建好，但要等点了「收尾」才现身
-  let gracePage = null;
-  await waitFor(async () => (gracePage = await pageByTitle(GRACE_TITLE)), '收尾小窗已预建');
-  await gracePage.waitForLoadState('domcontentloaded');
-  assert(!(await graceVisible()), '休息中：收尾小窗已预建但保持隐藏');
-
-  // 收尾推迟：遮罩收起回到工作，右下角换成收尾小窗
-  await overlay1.click('#btnGrace');
-  await waitFor(async () => !(await overlayVisible()), '遮罩收起');
-  assert(!overlay1.isClosed(), '收尾推迟后遮罩窗口被复用而非销毁');
-  await waitFor(graceVisible, '收尾小窗显示');
-  assert(!gracePage.isClosed(), '显示的是预建那个小窗，不是现建');
-  await sleep(600);
-  await shot(mainWin, '04-main-grace.png');
-  await shot(gracePage, '05-grace-widget.png');
-  assert(
-    await gracePage.evaluate(() => /^\d\d:\d\d$/.test(document.getElementById('clock').textContent)),
-    '收尾小窗显示倒计时'
+  // 拖着不休息：连续工作超过健康上限 → 小窗变红
+  await waitFor(
+    async () => (await duePage.evaluate(() => document.body.dataset.overwork)) === '2',
+    '拖过健康上限后小窗变红'
   );
+  await shot(duePage, '05-due-overwork.png');
+  assert(!(await overlayVisible()), '拖了这么久也没被强制盖遮罩');
 
-  // 小窗的「去休息」= 不等收尾走完，直接进休息（复用主窗口/托盘那条 finishGrace）
+  // 点「去休息」才真正进入休息，遮罩这时才盖上
   const overlay2 = overlay1;
-  await gracePage.click('#btnBreak');
-  await waitFor(overlayVisible, '小窗「去休息」直接进入休息');
-  assert(!(await graceVisible()), '进入休息后收尾小窗关闭');
+  await duePage.click('#btnBreak');
+  await waitFor(overlayVisible, '点「去休息」后遮罩盖上');
+  assert(!(await dueVisible()), '进入休息后小窗收起');
+  assert(!overlay1.isClosed(), '遮罩窗口是预建那个，没被销毁重建');
   await sleep(800);
-  await shot(overlay2, '06-overlay-no-grace.png');
+  await shot(overlay2, '06-overlay-break.png');
   assert(
-    await overlay2.evaluate(() => document.getElementById('btnGrace').hidden),
-    '第二次休息不再提供收尾按钮'
+    await overlay2.evaluate(() => /^\d+$/.test(document.getElementById('ovMin').textContent)),
+    '休息倒计时只报整分钟，不读秒'
   );
   assert(
     await overlay2.evaluate(() => document.getElementById('noteInput').value === ''),
     '窗口复用后复盘表单已重置'
-  );
-  assert(
-    (await pageByTitle(GRACE_TITLE)) === null,
-    '本番茄已用过收尾，第二次休息不再预建小窗'
   );
 
   // 「暂时让开」：遮罩整体收起去开个音乐，期间不会被 500ms 广播拽回来；
