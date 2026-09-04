@@ -251,6 +251,7 @@ function fillSettings() {
   $('setLong').value = settings.longMin;
   $('setEvery').value = settings.longEvery;
   $('setHealth').value = settings.healthMaxMin;
+  $('setAutoEnd').value = settings.autoEndMin;
   $('setSchedOn').checked = settings.schedule.enabled;
   settings.schedule.blocks.forEach((b, i) => {
     $(`schedStart${i}`).value = b.start;
@@ -283,6 +284,7 @@ function bindSettings() {
   numField('setLong', 'longMin');
   numField('setEvery', 'longEvery');
   numField('setHealth', 'healthMaxMin');
+  numField('setAutoEnd', 'autoEndMin');
   const saveSchedule = () =>
     saveSettings({
       schedule: {

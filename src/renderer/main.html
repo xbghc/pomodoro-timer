@@ -68,6 +68,8 @@
         <p class="hint">0 表示不使用长休息；开启工作时段后，这里只用于时段外</p>
         <label class="row"><span>连续工作健康上限</span><input id="setHealth" type="number" min="20" max="240" /></label>
         <p class="hint">番茄到点后拖着不休息，连续工作时长超过它，「该休息了」的提醒就变红；欠的休息也会按比例补进下一次休息（最多补到 2 倍）</p>
+        <label class="row"><span>自动结束专注</span><input id="setAutoEnd" type="number" min="0" max="480" /></label>
+        <p class="hint">连续工作（已扣除暂停）超过它就自动收摊回到空闲，并发一条系统通知；0 = 关闭。它比健康上限更狠：番茄正进行到一半也会被截断并记为放弃，所以别设得比番茄时长还短</p>
       </div>
       <div class="setting-group">
         <h3>工作时段</h3>

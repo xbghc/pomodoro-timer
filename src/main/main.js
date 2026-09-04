@@ -123,6 +123,11 @@ function main() {
     saveRuntime();
     sendAll('cue', { type: 'break-over' });
   });
+  // 自动收摊：窗口会跟着状态一起消失，不吭声的话人回来只会以为程序崩了
+  timer.on('auto-ended', ({ workedMs, inWork }) => {
+    saveRuntime();
+    notifyAutoEnded(workedMs, inWork);
+  });
 
   // ---------- IPC ----------
   ipcMain.handle('bootstrap', () => ({
@@ -152,7 +157,9 @@ function main() {
           shortMin: b.shortMin,
           longMin: b.longMin,
           longEvery: b.longEvery,
-          healthMaxMin: settings.healthMaxMin, // 健康上限是身体的事，不随时段变
+          // 健康上限和自动收摊是身体的事，不随时段变
+          healthMaxMin: settings.healthMaxMin,
+          autoEndMin: settings.autoEndMin,
         };
       }
     }
@@ -700,6 +707,19 @@ function main() {
     n.show();
   }
 
+  function notifyAutoEnded(workedMs, inWork) {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: '已自动结束专注',
+      body: inWork
+        ? `连续工作 ${mins(workedMs)} 分钟，本番茄记为放弃。去歇会儿吧`
+        : `连续工作 ${mins(workedMs)} 分钟还没去休息，已回到空闲。去歇会儿吧`,
+      icon: assetPath('icon.png'),
+    });
+    n.on('click', showMainWindow);
+    n.show();
+  }
+
   // 计时器状态附加工作时段与规划信息，供渲染层与托盘展示
   function fullState() {
     const state = timer.getState();
@@ -762,6 +782,7 @@ function main() {
       longMin: s.longMin,
       longEvery: s.longEvery,
       healthMaxMin: s.healthMaxMin,
+      autoEndMin: s.autoEndMin,
     };
   }
 
@@ -776,6 +797,7 @@ function main() {
       longMin: num(s.longMin, 1, 120, DEFAULT_SETTINGS.longMin),
       longEvery: num(s.longEvery, 0, 12, DEFAULT_SETTINGS.longEvery),
       healthMaxMin: num(s.healthMaxMin, 20, 240, DEFAULT_SETTINGS.healthMaxMin),
+      autoEndMin: num(s.autoEndMin, 0, 480, DEFAULT_SETTINGS.autoEndMin),
       soundOn: !!s.soundOn,
       soundVolume: Math.min(1, Math.max(0, Number(s.soundVolume) || 0)),
       theme: ['system', 'dark', 'light'].includes(s.theme) ? s.theme : 'system',

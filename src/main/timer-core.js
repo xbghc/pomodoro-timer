@@ -10,13 +10,15 @@
 //
 // 「不强制休息」的设计要点：番茄到点只落到 breakDue（该休息了），要不要休息由人决定。
 // 拖着不去休息的那段时间照样算工作，会按比例把欠的休息补进 break 时长（见 _breakMs）。
+// 但不强制不等于放任：连续工作超过 autoEndMin 就自动收摊回 idle（见 _checkAutoEnd）。
 //
 // 事件（EventEmitter）：
 //   work-completed {startedAt, endedAt}   到点完成一个番茄
-//   work-abandoned {startedAt, endedAt}   放弃/工作中结束专注
+//   work-abandoned {startedAt, endedAt}   放弃/工作中结束专注/自动收摊时番茄没走完
 //   break-due      {breakType}            该休息了，等人点「去休息」
 //   break-started  {breakType, durationMs}
 //   break-over     {breakType}
+//   auto-ended     {workedMs, inWork}     连续工作超上限，已自动结束专注
 'use strict';
 
 const { EventEmitter } = require('events');
@@ -34,6 +36,7 @@ const DEFAULT_CONFIG = {
   longMin: 15,
   longEvery: 4, // 每完成 N 个番茄进入长休息；0 = 不用长休息
   healthMaxMin: 50, // 连续工作的健康上限（分钟）：超过就把「该休息了」的提醒变红
+  autoEndMin: 120, // 连续工作超过它就自动结束专注回到空闲；0 = 关闭
 };
 
 class PomodoroTimer extends EventEmitter {
@@ -185,7 +188,21 @@ class PomodoroTimer extends EventEmitter {
       if (this.breakType === 'long') this.cycleCount = 0;
       this.emit('break-over', { breakType: this.breakType });
     }
-    // breakDue 不设超时：不强制休息是这个阶段存在的全部理由
+    // breakDue 本身不设超时（不强制休息是这个阶段存在的全部理由），
+    // 兜底交给下面这条：连着干太久就整个收摊，省得小窗在右下角挂到天亮
+    this._checkAutoEnd();
+  }
+
+  // 连续工作超上限 → 自动结束专注。放在到点处理之后：番茄能正常走完就先记完成，
+  // 落到 breakDue 再收摊，不至于把一个刚好走满的番茄记成放弃。
+  _checkAutoEnd() {
+    const limit = this.config.autoEndMin;
+    if (!(limit > 0)) return;
+    if (this.phase !== 'work' && this.phase !== 'breakDue') return;
+    const worked = this.workedMs();
+    if (worked < limit * MIN) return;
+    this.emit('auto-ended', { workedMs: worked, inWork: this.phase === 'work' });
+    this.endFocus(); // 工作中被截断会顺带记一条放弃，breakDue 下番茄早已记完成
   }
 
   // 该给多长的休息：超出计划的那段工作按设置里的 工作:休息 比例折算补上，封顶 MAX_BREAK_SCALE 倍

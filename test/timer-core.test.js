@@ -11,7 +11,8 @@ function setup(config = {}) {
   const clock = { t: 1_000_000 };
   const timer = new PomodoroTimer({ config, now: () => clock.t });
   const events = [];
-  for (const name of ['work-completed', 'work-abandoned', 'break-due', 'break-started', 'break-over']) {
+  const NAMES = ['work-completed', 'work-abandoned', 'break-due', 'break-started', 'break-over', 'auto-ended'];
+  for (const name of NAMES) {
     timer.on(name, (payload) => events.push({ name, ...payload }));
   }
   // 前进 ms 毫秒，模拟宿主每 500ms 一次 tick
@@ -58,13 +59,79 @@ test('完整循环：工作→该休息了→休息→等待手动开始', () =>
 });
 
 test('不强制休息：breakDue 挂多久都不会自己进休息', () => {
-  const { timer, events, advance } = setup();
+  const { timer, events, advance } = setup({ autoEndMin: 0 });
   timer.startWork();
   advance(25 * MIN);
   advance(3 * 60 * MIN); // 挂了三小时没理它
   assert.equal(timer.getState().phase, 'breakDue');
   assert.ok(!events.some((e) => e.name === 'break-started'));
   assert.equal(events.filter((e) => e.name === 'work-completed').length, 1, '不会重复记完成');
+});
+
+test('自动收摊：拖着不休息累计超上限，回到空闲并记完成不记放弃', () => {
+  const { timer, events, advance } = setup({ autoEndMin: 120 });
+  timer.startWork();
+  advance(25 * MIN);
+  advance(94 * MIN); // 累计 119 分钟，还差一点
+  assert.equal(timer.getState().phase, 'breakDue');
+
+  advance(1 * MIN); // 满 120
+  assert.equal(timer.getState().phase, 'idle');
+  assert.equal(timer.getState().cycleCount, 0, '结束专注同时清零循环计数');
+  const auto = events.find((e) => e.name === 'auto-ended');
+  assert.equal(auto.inWork, false);
+  assert.equal(auto.workedMs, 120 * MIN);
+  assert.ok(!events.some((e) => e.name === 'work-abandoned'), '番茄早已记完成，不该再记放弃');
+});
+
+test('自动收摊：工作中也生效，进行中的番茄被截断并记为放弃', () => {
+  const { timer, events, advance } = setup({ workMin: 180, autoEndMin: 120 });
+  timer.startWork();
+  advance(119 * MIN);
+  assert.equal(timer.getState().phase, 'work');
+
+  advance(1 * MIN);
+  assert.equal(timer.getState().phase, 'idle');
+  const auto = events.find((e) => e.name === 'auto-ended');
+  assert.equal(auto.inWork, true);
+  const ab = events.find((e) => e.name === 'work-abandoned');
+  assert.equal(ab.endedAt - ab.startedAt, 120 * MIN);
+  assert.ok(!events.some((e) => e.name === 'work-completed'));
+});
+
+test('自动收摊：番茄正好走满时先记完成，再收摊', () => {
+  const { timer, events, advance } = setup({ workMin: 120, autoEndMin: 120 });
+  timer.startWork();
+  advance(120 * MIN);
+  assert.equal(timer.getState().phase, 'idle', '同一 tick 里完成 + 收摊');
+  assert.ok(events.some((e) => e.name === 'work-completed'), '走满的番茄要记完成');
+  assert.ok(!events.some((e) => e.name === 'work-abandoned'), '不能记成放弃');
+  assert.equal(events.find((e) => e.name === 'auto-ended').inWork, false);
+});
+
+test('自动收摊：暂停的时间不算，挂着暂停不会被收摊', () => {
+  const { timer, events, advance } = setup({ workMin: 180, autoEndMin: 120 });
+  timer.startWork();
+  advance(60 * MIN);
+  timer.pause();
+  advance(5 * 60 * MIN); // 暂停中挂了五小时
+  assert.equal(timer.getState().phase, 'work');
+  assert.ok(!events.some((e) => e.name === 'auto-ended'));
+  timer.resume();
+  advance(60 * MIN); // 实际工作满 120
+  assert.equal(timer.getState().phase, 'idle');
+  assert.equal(events.find((e) => e.name === 'auto-ended').workedMs, 120 * MIN);
+});
+
+test('自动收摊：休息中不触发，休息不算连续工作', () => {
+  const { timer, events, advance } = setup({ autoEndMin: 120 });
+  timer.startWork();
+  advance(25 * MIN);
+  timer.startBreak();
+  advance(5 * MIN);
+  advance(3 * 60 * MIN); // breakOver 挂了三小时
+  assert.equal(timer.getState().phase, 'breakOver');
+  assert.ok(!events.some((e) => e.name === 'auto-ended'));
 });
 
 test('每完成 4 个番茄进入长休息，长休息结束循环计数归零', () => {
@@ -150,7 +217,7 @@ test('拖堂补偿封顶 2 倍：挂机一下午不会换来荒唐的长休息',
   const { timer, advance } = setup();
   timer.startWork();
   advance(25 * MIN);
-  advance(5 * 60 * MIN);
+  advance(40 * MIN); // 多干 40 分钟 → 该补 8 分钟，被 2 倍封顶砍到 5
   timer.startBreak();
   assert.equal(timer.getState().remainingMs, 10 * MIN, '短休息最多补到 2 倍');
 });
