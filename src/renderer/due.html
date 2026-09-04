@@ -6,14 +6,16 @@
   <title>该休息了</title>
   <link rel="stylesheet" href="due.css" />
 </head>
-<body>
+<body data-collapsed="false">
   <div class="card">
     <div class="texts">
       <span id="title" class="title">该休息了</span>
-      <span id="sub" class="sub">已连续工作 25 分钟 · 休息 5 分钟</span>
+      <span id="sub" class="sub">已工作 25 分钟 · 休息 5 分钟</span>
     </div>
     <button id="btnBreak" class="btn">去休息</button>
+    <button id="btnCollapse" class="collapse" title="收起">›</button>
   </div>
+  <button id="btnExpand" class="handle" title="展开">‹</button>
   <script src="sound.js"></script>
   <script src="due.js"></script>
 </body>

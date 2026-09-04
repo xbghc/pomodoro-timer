@@ -36,6 +36,13 @@ const PREBUILD_MS = 30 * 1000;
 // 没人会拿它绕过休息；花掉的是休息时间本身，倒计时照常走。
 const AWAY_MS = 30 * 1000;
 
+// 「该休息了」小窗的两态尺寸：展开是完整卡片，收起只剩一个贴右下角的小把手。
+// 收起后仍带着健康色（绿/琥珀/红），让开了地方但不丢提醒。
+const DUE_SIZE = {
+  expanded: { width: 312, height: 62 },
+  collapsed: { width: 40, height: 40 },
+};
+
 const DEFAULT_SETTINGS = {
   ...DEFAULT_CONFIG,
   soundOn: true,
@@ -185,9 +192,11 @@ function main() {
       return ok;
     },
     endFocus: () => timer.endFocus(),
-    // 只动遮罩、不动计时的窗口命令
-    away: () => startAway(),
+    // 只动窗口、不动计时的命令
+    away: () => startAway(), // 遮罩暂时让开
     endAway: () => endAway(),
+    collapseDue: () => setDueCollapsed(true), // 小窗收成把手 / 展开回卡片
+    expandDue: () => setDueCollapsed(false),
   };
   ipcMain.handle('cmd', (_e, name, arg) => {
     const fn = commands[name];
@@ -536,8 +545,7 @@ function main() {
 
   function createDueWindow() {
     const wa = screen.getPrimaryDisplay().workArea; // 用 workArea 而非 bounds：贴右下角但不压任务栏
-    const width = 268;
-    const height = 62;
+    const { width, height } = DUE_SIZE.expanded;
     const margin = 16;
     const win = new BrowserWindow({
       x: wa.x + wa.width - width - margin,
@@ -570,6 +578,19 @@ function main() {
       if (dueShown) reveal();
       flushBreakCue(); // 铃声归这个窗口播，就绪后补上
     });
+  }
+
+  // 折叠/展开小窗：钉住右下角改尺寸，人把它拖到过哪就在哪原地缩放
+  function setDueCollapsed(collapsed) {
+    if (!dueWindow || dueWindow.isDestroyed()) return false;
+    const size = collapsed ? DUE_SIZE.collapsed : DUE_SIZE.expanded;
+    const b = dueWindow.getBounds();
+    dueWindow.setBounds({
+      x: b.x + b.width - size.width,
+      y: b.y + b.height - size.height,
+      ...size,
+    });
+    return true;
   }
 
   function closeDueWindow() {

@@ -14,12 +14,21 @@ function render(state) {
   $('title').textContent = state.breakType === 'long' ? '该长休息了' : '该休息了';
   // breakDue 的 remainingMs 就是「现在去休息能休多久」（已按拖堂补过），预建期间只能先按短休息估
   const breakMs = state.phase === 'breakDue' ? state.remainingMs : state.config.shortMin * 60000;
-  $('sub').textContent = `已连续工作 ${mins(state.workedMs)} 分钟 · 休息 ${mins(breakMs)} 分钟`;
+  $('sub').textContent = `已工作 ${mins(state.workedMs)} 分钟 · 休息 ${mins(breakMs)} 分钟`;
   // 0 健康 / 1 接近健康上限 / 2 已超上限：拖得越久，整块挂件越红
   document.body.dataset.overwork = state.overwork;
 }
 
 $('btnBreak').addEventListener('click', () => window.api.cmd('startBreak'));
+
+// 收起 = 缩成右下角一个小把手：让开地方，但健康色还在余光里
+// 折叠只是窗口尺寸，计时不受影响；下个番茄是新窗口，自然回到展开态
+function setCollapsed(collapsed) {
+  document.body.dataset.collapsed = collapsed ? 'true' : 'false';
+  window.api.cmd(collapsed ? 'collapseDue' : 'expandDue');
+}
+$('btnCollapse').addEventListener('click', () => setCollapsed(true));
+$('btnExpand').addEventListener('click', () => setCollapsed(false));
 
 window.api.bootstrap().then(({ state, settings: s }) => {
   settings = s;

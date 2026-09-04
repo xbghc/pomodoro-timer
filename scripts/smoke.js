@@ -49,6 +49,14 @@ const windowVisible = (title) =>
       BrowserWindow.getAllWindows().some((w) => w.getTitle() === t && w.isVisible()),
     title
   );
+const windowBounds = (title) =>
+  app.evaluate(
+    ({ BrowserWindow }, t) => {
+      const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === t);
+      return w ? w.getBounds() : null;
+    },
+    title
+  );
 const overlayVisible = () => windowVisible(OVERLAY_TITLE);
 const dueVisible = () => windowVisible(DUE_TITLE);
 
@@ -148,6 +156,30 @@ async function main() {
   await shot(duePage, '05-due-overwork.png');
   assert(!(await overlayVisible()), '拖了这么久也没被强制盖遮罩');
 
+  // 收起 → 缩成右下角小把手（健康色跟着走），再点一下展开回卡片
+  const expanded = await windowBounds(DUE_TITLE);
+  await duePage.click('#btnCollapse');
+  await sleep(300);
+  const collapsed = await windowBounds(DUE_TITLE);
+  await shot(duePage, '06-due-collapsed.png');
+  assert(
+    collapsed.width < expanded.width && collapsed.height < expanded.height,
+    '收起后小窗缩成把手'
+  );
+  assert(
+    collapsed.x + collapsed.width === expanded.x + expanded.width &&
+      collapsed.y + collapsed.height === expanded.y + expanded.height,
+    '收起时右下角钉住不动'
+  );
+  assert(await dueVisible(), '收起不是关掉：窗口还在，只是变小了');
+  await duePage.click('#btnExpand');
+  await sleep(300);
+  const reExpanded = await windowBounds(DUE_TITLE);
+  assert(
+    reExpanded.width === expanded.width && reExpanded.height === expanded.height,
+    '展开后回到原尺寸'
+  );
+
   // 点「去休息」才真正进入休息，遮罩这时才盖上
   const overlay2 = overlay1;
   await duePage.click('#btnBreak');
@@ -155,7 +187,7 @@ async function main() {
   assert(!(await dueVisible()), '进入休息后小窗收起');
   assert(!overlay1.isClosed(), '遮罩窗口是预建那个，没被销毁重建');
   await sleep(800);
-  await shot(overlay2, '06-overlay-break.png');
+  await shot(overlay2, '07-overlay-break.png');
   assert(
     await overlay2.evaluate(() => /^\d+$/.test(document.getElementById('ovMin').textContent)),
     '休息倒计时只报整分钟，不读秒'
@@ -184,37 +216,37 @@ async function main() {
   await overlay2.fill('#nextInput', '给设置页补工作时段的界面');
   await overlay2.press('#nextInput', 'Control+Enter');
   await sleep(400);
-  await shot(overlay2, '07-overlay-note-saved.png');
+  await shot(overlay2, '08-overlay-note-saved.png');
 
   // 休息结束 → 遮罩停留等手动开始
   await overlay2.waitForSelector('#btnStartNext:not([hidden])', { timeout: 30000 });
   await sleep(400);
-  await shot(overlay2, '08-overlay-break-over.png');
+  await shot(overlay2, '09-overlay-break-over.png');
   assert((await chimes(overlay2)).includes('break-end'), '休息结束时「休息结束」铃声已响');
 
   // 手动开始下一个番茄 → 遮罩关闭，「下一步规划」自动带入为本番茄规划
   await overlay2.click('#btnStartNext');
   await sleep(1200);
-  await shot(mainWin, '09-main-work2.png');
+  await shot(mainWin, '10-main-work2.png');
 
   // 结束专注（第 2 个番茄记为放弃）→ 历史页应有 1 完成 + 1 放弃
   await mainWin.click('#btnEndFocus');
   await sleep(600);
   await mainWin.click('[data-tab="history"]');
   await sleep(600);
-  await shot(mainWin, '10-history.png');
+  await shot(mainWin, '11-history.png');
 
   await mainWin.click('[data-tab="settings"]');
   await sleep(400);
-  await shot(mainWin, '11-settings.png');
+  await shot(mainWin, '12-settings.png');
 
   // 切浅色主题验证配色变量
   await mainWin.selectOption('#setTheme', 'light');
   await sleep(600);
-  await shot(mainWin, '12-settings-light.png');
+  await shot(mainWin, '13-settings-light.png');
   await mainWin.click('[data-tab="history"]');
   await sleep(400);
-  await shot(mainWin, '13-history-light.png');
+  await shot(mainWin, '14-history-light.png');
 
   await app.close();
   console.log('完成，截图在:', OUT);

@@ -1,5 +1,7 @@
 /* 「该休息了」小挂件：右下角常驻，配色沿用休息遮罩的电木黑。
-   连续工作越久越红：绿 → 琥珀 → 红，由 body[data-overwork] 切换 */
+   连续工作越久越红：绿 → 琥珀 → 红，由 body[data-overwork] 切换。
+   两态：展开是完整卡片，收起是一整块健康色的小把手（body[data-collapsed]），
+   尺寸由主进程改窗口 bounds，这里只管切内容。 */
 * {
   margin: 0;
   padding: 0;
@@ -21,7 +23,14 @@ body {
   cursor: default;
   display: flex;
   -webkit-app-region: drag; /* 挡住视线时整块拖走 */
-  transition: border-color 0.6s;
+  transition: border-color 0.6s, background 0.6s;
+}
+
+/* 收起态：整块染成健康色，40×40 的方块在余光里也看得见 */
+body[data-collapsed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  -webkit-app-region: no-drag; /* 只剩一个按钮，全给点击用 */
 }
 
 /* 接近健康上限 */
@@ -43,7 +52,11 @@ body[data-overwork='2'] {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
+  padding: 0 8px 0 12px;
+}
+
+body[data-collapsed='true'] .card {
+  display: none;
 }
 
 .texts {
@@ -86,6 +99,48 @@ body[data-overwork='2'] {
 
 .btn:hover {
   background: var(--accent-hover);
+}
+
+/* 展开态右端的收起按钮：往右下角收，所以是「›」 */
+.collapse {
+  -webkit-app-region: no-drag;
+  background: none;
+  border: none;
+  color: #6b655c;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1;
+  padding: 8px 4px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.collapse:hover {
+  color: #efebe3;
+}
+
+/* 收起态的把手：占满整个 40×40，点一下往左展开回卡片 */
+.handle {
+  display: none;
+  -webkit-app-region: no-drag;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #16130f;
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+body[data-collapsed='true'] .handle {
+  display: flex;
+}
+
+.handle:hover {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 :focus-visible {
