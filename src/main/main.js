@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const { autoUpdater } = require('electron-updater');
 const { PomodoroTimer, DEFAULT_CONFIG } = require('./timer-core');
 const { Store } = require('./store');
+const { followCurrentDesktop } = require('./virtual-desktop');
 const {
   DEFAULT_SCHEDULE,
   sanitizeSchedule,
@@ -404,6 +405,7 @@ function main() {
       const reveal = (fresh) => {
         if (win.isDestroyed()) return;
         win.webContents.send('state', fullState()); // 预建期间页面停在占位内容，先喂真实状态
+        followCurrentDesktop(win); // 预建到现在人可能已经切了桌面，盖之前先拽过来
         win.show();
         win.setBounds(display.bounds); // 混合 DPI 下再钉一次，防缩放舍入差一条
         if (primary) win.focus();
@@ -563,7 +565,8 @@ function main() {
 
     const reveal = () => {
       if (win.isDestroyed()) return;
-      win.webContents.send('state', fullState()); // 预建期间页面停在预填值，先喂真实状态
+      win.webContents.send('state', fullState()); // 建窗期间页面停在预填值，先喂真实状态
+      followCurrentDesktop(win); // 从建窗到就绪这一两秒里人也可能切了桌面
       win.showInactive(); // 不抢焦点：人正打着字，光标不能被挂件夺走
     };
     win.once('ready-to-show', () => {
@@ -790,9 +793,17 @@ function main() {
     ensureOverlays(state);
     ensureDueWindow(state);
     assertOverlaysOnTop();
+    followWindowsAcrossDesktops();
     sendAll('state', state);
     updateTray(state);
     checkOverworkNotice(state);
+  }
+
+  // 人切到别的虚拟桌面时 Windows 会把窗口留在原处，又没有切换事件可订阅，
+  // 只能借这条 500ms 的广播顺手把已经露面的窗口拽过来。接口不可用时整体是 no-op。
+  function followWindowsAcrossDesktops() {
+    if (dueShown) followCurrentDesktop(dueWindow);
+    if (overlaysShown) for (const w of overlays) followCurrentDesktop(w);
   }
 
   function sendAll(channel, payload) {

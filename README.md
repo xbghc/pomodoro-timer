@@ -32,6 +32,11 @@ Electron + 纯 JavaScript（无前端框架、无打包器），数据全部保�
 - 主窗口「历史」页按天翻看：每个番茄的起止时间、速记内容、完成/放弃状态、每日完成数与专注时长
 - 数据以 JSON 存储在本地用户目录，不上传任何数据
 
+### 跨虚拟桌面
+- 用了 Windows 虚拟桌面（Win+Ctrl+D）时，切到别的桌面后「该休息了」小窗和休息遮罩会自动跟过来，不会被落在原来的桌面上
+- 走的是公开的 `IVirtualDesktopManager`（微软对它的定位就是「让辅助窗口跟着人跑」），没有碰未公开接口，不会因 Windows 更新而失效
+- 系统通知本来就不受桌面限制，跟随万一不可用时它仍能把提醒送到
+
 ### 系统集成
 - 关闭主窗口 = 退到托盘继续计时；托盘菜单含开始/暂停/放弃/结束专注/退出
 - 开机自启（启动到托盘，不弹主窗口），可在设置中关闭
@@ -49,6 +54,7 @@ Electron + 纯 JavaScript（无前端框架、无打包器），数据全部保�
 src/main/timer-core.js   计时状态机（纯逻辑，可单测）
 src/main/main.js         Electron 主进程：窗口/托盘/遮罩/IPC/自启
 src/main/store.js        settings/history/runtime 的本地 JSON 持久化
+src/main/virtual-desktop.js  Windows 虚拟桌面跟随（koffi 调 IVirtualDesktopManager）
 src/main/preload.js      contextBridge 安全桥
 src/renderer/main.*      主窗口（计时/历史/设置三个页签）
 src/renderer/overlay.*   全屏休息遮罩
@@ -71,7 +77,17 @@ xvfb-run -a node scripts/smoke.js   # 无头环境端到端冒烟 + 截图
 
 ## 构建 Windows 安装包
 
-在 Linux 上交叉打包。electron-builder 给安装器嵌入图标/版本资源时需要 Wine，本机没装 Wine 的话用官方 Docker 镜像（已验证可用）：
+发版走 `git push origin v<版本>`，GitHub Actions 在 windows-latest 上构建，`npm ci` 会自动装上 Windows 版的 koffi 二进制，无需额外步骤。
+
+在 Linux 上交叉打包则要多一步：koffi 的原生二进制按平台拆成了 `@koromix/koffi-<platform>` 可选依赖，npm 只装本机那个，得手动补上 Windows 版——
+
+```bash
+npm install --no-save --force --os=win32 --cpu=x64 @koromix/koffi-win32-x64
+```
+
+注意它会顶掉本机平台的那个包，打完包跑 `npm install` 装回来，否则本地 `npm start` 和冒烟测试会报「Cannot find the native Koffi module」。
+
+electron-builder 给安装器嵌入图标/版本资源时需要 Wine，本机没装 Wine 的话用官方 Docker 镜像（已验证可用）：
 
 ```bash
 docker run --rm \
@@ -97,5 +113,5 @@ docker run --rm \
 
 - 自动更新从 GitHub Releases 下载（electron-updater），网络访问不了 GitHub 时会静默失败、周期重试，也可以随时手动下载安装包覆盖安装
 - 应用退出/重启后，进行中的番茄不会恢复（历史记录不受影响）
-- **Windows 虚拟桌面**：窗口被系统钉死在它被创建时的那个桌面上，Windows 不提供「窗口显示在所有虚拟桌面」的应用接口（Electron 的 `setVisibleOnAllWorkspaces` 在 Windows 上是空操作）。所以「该休息了」小窗刻意到点才创建，好落在人当下所在的桌面；但到点之后再切桌面，它仍会留在原处。这种情况靠系统通知兜底——到点一条、跨过健康上限一条、自动收摊一条，通知永远弹在当前桌面。休息遮罩同理，它为了消除黑屏必须提前预建，跨桌面时可能盖在另一个桌面上
+- **Windows 虚拟桌面**：窗口跟随是轮询实现的（系统不发桌面切换事件），切过去后约半秒才跟上。真正的「显示在所有桌面」只有未公开的 COM 接口能做，那些接口的 GUID 随 Windows build 变，装个系统更新就可能静默失效，所以没用。跟随一旦不可用（接口取不到、koffi 加载失败）会整体降级为不跟随，功能其余部分照常，此时靠系统通知兜底
 - 无代码签名（个人使用场景，签名证书成本不划算）；因此更新包只校验 latest.yml 里的 SHA512，不校验发布者签名
