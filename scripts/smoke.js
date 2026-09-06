@@ -68,8 +68,8 @@ async function pageByTitle(title) {
   return null;
 }
 
-// 窗口改为提前预建后，铃声不再由 bootstrap 时的 phase 决定，而是主进程下发 cue。
-// 探针挂在 playChime 上：「该休息了」归右下角小窗播，「休息结束」归遮罩播。
+// 遮罩改为提前预建后，铃声不再由 bootstrap 时的 phase 决定，而是主进程下发 cue。
+// 探针挂在 playChime 上，两声都归遮罩播（它是到点时唯一保证已就绪的 renderer）。
 async function installChimeProbe(page) {
   await page.evaluate(() => {
     window.__chimes = [];
@@ -133,20 +133,21 @@ async function main() {
   await sleep(1200);
   await shot(mainWin, '02-main-work.png');
 
-  // 「该休息了」小窗同样提前预建：番茄末段就建好，到点才现身
-  let duePage = null;
-  await waitFor(async () => (duePage = await pageByTitle(DUE_TITLE)), '「该休息了」小窗已预建');
-  await duePage.waitForLoadState('domcontentloaded');
-  await installChimeProbe(duePage);
+  // 小窗刻意不预建：到点才建，才能落在人当下所在的虚拟桌面上
+  assert(
+    (await pageByTitle(DUE_TITLE)) === null,
+    '专注中不预建「该休息了」小窗（预建会把它钉死在当时的虚拟桌面）'
+  );
 
   // 到点 → 不再强制盖遮罩，只有右下角小窗现身
   await waitFor(dueVisible, '番茄到点：「该休息了」小窗显示');
+  const duePage = await pageByTitle(DUE_TITLE);
+  await duePage.waitForLoadState('domcontentloaded');
   assert(!(await overlayVisible()), '到点不强制休息：遮罩仍然藏着，等人点「去休息」');
-  assert(!duePage.isClosed(), '显示的是预建那个小窗，不是现建');
   await sleep(800);
   await shot(mainWin, '03-main-break-due.png');
   await shot(duePage, '04-due-widget.png');
-  assert((await chimes(duePage)).includes('work-end'), '到点时「该休息了」铃声已响');
+  assert((await chimes(overlay1)).includes('work-end'), '到点时「该休息了」铃声已响');
 
   // 拖着不休息：连续工作超过健康上限 → 小窗变红
   await waitFor(
@@ -184,7 +185,7 @@ async function main() {
   const overlay2 = overlay1;
   await duePage.click('#btnBreak');
   await waitFor(overlayVisible, '点「去休息」后遮罩盖上');
-  assert(!(await dueVisible()), '进入休息后小窗收起');
+  assert((await pageByTitle(DUE_TITLE)) === null, '进入休息后小窗关闭');
   assert(!overlay1.isClosed(), '遮罩窗口是预建那个，没被销毁重建');
   await sleep(800);
   await shot(overlay2, '07-overlay-break.png');

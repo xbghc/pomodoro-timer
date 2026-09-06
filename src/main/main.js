@@ -25,10 +25,10 @@ const {
   nextStartToday,
 } = require('./schedule');
 
-// 窗口提前预建的提前量：Windows 上新建 renderer 进程要数秒（进程冷启动 + Defender 扫描），
+// 遮罩提前预建的提前量：Windows 上新建 renderer 进程要数秒（进程冷启动 + Defender 扫描），
 // 到点现建会黑屏卡住整块屏幕。只提前这么点是有意的 —— 工作全程挂着隐藏窗口会被系统换页出去，
-// 到点还得换回来，等于白预建。番茄末段一并把「该休息了」小窗和遮罩都建好：
-// 小窗到点即现身，遮罩则一路隐藏着等人点「去休息」。
+// 到点还得换回来，等于白预建。番茄末段建好后一路隐藏着，等人点「去休息」才盖上。
+// 右下角小窗刻意不走这条路，理由见 ensureDueWindow。
 const PREBUILD_MS = 30 * 1000;
 
 // 「暂时让开」：休息中点一下，遮罩整体收起这么久，够去开个音乐 / 回条消息，到点自动盖回来。
@@ -91,6 +91,7 @@ function main() {
   let lastCompletedId = null;
   let lastTrayMenuKey = '';
   let wasInWork = null; // 上一 tick 是否处于工作时段（null = 尚未采样，避免启动瞬间误触发）
+  let lastOverwork = 0; // breakDue 期间上一次广播的过劳档位，用于「刚跨过健康上限」的边沿触发
   // dev(未打包)| idle | checking | none(已最新)| downloading | ready | error
   let updateInfo = { status: app.isPackaged ? 'idle' : 'dev', version: '' };
 
@@ -125,6 +126,8 @@ function main() {
   timer.on('break-due', () => {
     pendingBreakCue = true;
     flushBreakCue();
+    lastOverwork = timer.overworkLevel(); // 到点那刻的档位当基线，别把已有的红重报一遍
+    notifyBreakDue(timer.workedMs());
   });
   timer.on('break-over', () => {
     saveRuntime();
@@ -410,6 +413,7 @@ function main() {
         overlayReveal.set(win, reveal);
         // 到点时预建还没完成：宁可遮罩晚半秒弹出，也不要拿纯色板黑屏占住整块屏幕
         if (overlaysShown) reveal(true);
+        flushBreakCue();
       });
       overlays.push(win);
     }
@@ -471,11 +475,11 @@ function main() {
     overlaysShown = false;
   }
 
-  // 铃声得有个加载完的 renderer 才播得出，而「该休息了」这一声归小窗播。
-  // 预建正常时它早就绪，直接就发；没赶上就等它 ready-to-show 时补发。
+  // 铃声得有个加载完的 renderer 才播得出，这一声归遮罩播：它全程预建，到点即就绪。
+  // 小窗改成到点现建后要等几秒才起来，铃声不能跟着晚。
   function flushBreakCue() {
     if (!pendingBreakCue) return;
-    if (!dueReveal) return;
+    if (!overlays.some((w) => !w.isDestroyed() && overlayReveal.has(w))) return;
     pendingBreakCue = false;
     sendAll('cue', { type: 'break-due' });
   }
@@ -518,29 +522,19 @@ function main() {
   // 番茄到点不再直接盖遮罩：右下角挂个不抢焦点的小挂件说一声「该休息了」，
   // 点了才进休息。人正打字打到一半时，糊脸的全屏遮罩只会招人烦，反而被跳过。
   //
-  // 与遮罩同样的三态对账，预建时机也一样（番茄末段 PREBUILD_MS）。
+  // 与遮罩不同，这个窗口刻意不预建：Windows 把窗口钉死在它被创建时的那个虚拟桌面上，
+  // 提前 30 秒建好就等于赌人这半分钟不会切桌面。到点现建落在当下的桌面上，命中率高得多。
+  // 它只有 312×62，现建顶多是晚一两秒露面，不像遮罩那样会拿黑屏占住整块屏幕。
+  // 切桌面终究还是会把它落在身后 —— 那部分交给系统通知兜底（notifyBreakDue）。
   function ensureDueWindow(state) {
-    const show = state.phase === 'breakDue';
-    const prebuild = state.phase === 'work' && !state.paused && state.remainingMs <= PREBUILD_MS;
-
-    if (!show && !prebuild) {
+    if (state.phase !== 'breakDue') {
       closeDueWindow();
       return;
     }
     if (!dueWindow) createDueWindow();
-    if (show) showDueWindow();
-    else if (dueShown) hideDueWindow();
-  }
-
-  function showDueWindow() {
     if (dueShown) return;
     dueShown = true;
     if (dueReveal) dueReveal(); // 还没就绪的窗口由它自己的 ready-to-show 接手
-  }
-
-  function hideDueWindow() {
-    dueShown = false;
-    if (dueWindow && !dueWindow.isDestroyed()) dueWindow.hide();
   }
 
   function createDueWindow() {
@@ -574,9 +568,7 @@ function main() {
     };
     win.once('ready-to-show', () => {
       dueReveal = reveal;
-      // 预建没赶上（番茄短到还没建完就到点）：就绪即显示
-      if (dueShown) reveal();
-      flushBreakCue(); // 铃声归这个窗口播，就绪后补上
+      if (dueShown) reveal(); // 常态就是这条：窗口是到点现建的，建好即现身
     });
   }
 
@@ -728,6 +720,39 @@ function main() {
     n.show();
   }
 
+  // 小窗只活在它被创建时的那个虚拟桌面上 —— Windows 不给应用「窗口显示在所有桌面」
+  // 这个能力（Electron 的 setVisibleOnAllWorkspaces 在 Windows 上是空操作）。
+  // 系统通知没这个限制，永远弹在人当下所在的桌面，用它兜住「切了桌面就看不见提醒」。
+  function notifyBreakDue(workedMs) {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: '该休息了',
+      body: `已工作 ${mins(workedMs)} 分钟。右下角点「去休息」，或点这里打开番茄钟`,
+      icon: assetPath('icon.png'),
+    });
+    n.on('click', showMainWindow);
+    n.show();
+  }
+
+  // 拖过健康上限再催一次：第一条通知早过期了，而小窗可能正落在另一个桌面上
+  function notifyOverwork(workedMs) {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: '连续工作超过健康上限',
+      body: `已经 ${mins(workedMs)} 分钟没休息了，去歇会儿吧`,
+      icon: assetPath('icon.png'),
+    });
+    n.on('click', showMainWindow);
+    n.show();
+  }
+
+  // 只在等人来休息时催，且只在刚跨过上限的那一下发，不做周期性轰炸
+  function checkOverworkNotice(state) {
+    if (state.phase !== 'breakDue') return;
+    if (state.overwork === 2 && lastOverwork < 2) notifyOverwork(state.workedMs);
+    lastOverwork = state.overwork;
+  }
+
   function notifyAutoEnded(workedMs, inWork) {
     if (!Notification.isSupported()) return;
     const n = new Notification({
@@ -767,6 +792,7 @@ function main() {
     assertOverlaysOnTop();
     sendAll('state', state);
     updateTray(state);
+    checkOverworkNotice(state);
   }
 
   function sendAll(channel, payload) {

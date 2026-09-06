@@ -156,7 +156,8 @@ window.api.onCue((cue) => {
     if (mode === 'primary') $('noteInput').focus();
     return;
   }
-  // 「该休息了」那声归右下角小窗播（那时遮罩还藏着）；这里只管休息结束
+  // 遮罩全程预建，是到点那一刻唯一保证已就绪的 renderer，两声铃都归它播
   if (mode !== 'primary' || !settings?.soundOn) return;
-  if (cue.type === 'break-over') playChime('break-end', settings.soundVolume);
+  if (cue.type === 'break-due') playChime('work-end', settings.soundVolume);
+  else if (cue.type === 'break-over') playChime('break-end', settings.soundVolume);
 });
