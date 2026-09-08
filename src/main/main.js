@@ -83,7 +83,7 @@ function main() {
   let overlays = [];
   let dueWindow = null; // 「该休息了」小窗（右下角挂件）
   let dueReveal = null; // 小窗的 showInactive()；非 null 即表示 ready-to-show 已触发
-  let dueShown = false; // 小窗已显示；预建完成但番茄还没到点时为 false
+  let dueShown = false; // 已要求显示小窗；窗口可能还在等 ready-to-show，真正露面与否看 isVisible()
   let overlaysShown = false; // 遮罩已显示；预建完成但未到点时为 false
   const overlayReveal = new Map(); // win → reveal()；有 key 即表示该窗口 ready-to-show 已触发
   let pendingBreakCue = false; // 番茄已到点但小窗还没就绪，铃声待补发
@@ -550,7 +550,7 @@ function main() {
       height,
       frame: false,
       thickFrame: false, // 同遮罩：去掉 DWM 给无边框窗口画的 1px 白线
-      alwaysOnTop: true, // 默认 floating 层即可，不用遮罩那种 screen-saver 级别
+      alwaysOnTop: true,
       skipTaskbar: true,
       resizable: false,
       maximizable: false,
@@ -560,6 +560,12 @@ function main() {
       webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false },
     });
     dueWindow = win;
+    // 不能停在构造参数给的默认 floating 层：Electron 在 Windows 上把 floating 实现成
+    // 「用 SetWindowPos 插到任务栏窗口（Shell_TrayWnd）之后」，而且每次本窗口被激活都重做一遍。
+    // 任务栏并不保证一直是置顶窗（前台是全屏程序时系统会把它降下去），插到一个非置顶窗之后
+    // 就会静默丢掉 WS_EX_TOPMOST —— 到点时人正全屏看东西，小窗从此沉在所有窗口下面。
+    // screen-saver 层直接给 HWND_TOPMOST，不以任务栏为锚；小窗贴在 workArea 内本就不压任务栏。
+    win.setAlwaysOnTop(true, 'screen-saver');
     win.removeMenu();
     win.loadFile(path.join(__dirname, '../renderer/due.html'));
 
@@ -568,11 +574,24 @@ function main() {
       win.webContents.send('state', fullState()); // 建窗期间页面停在预填值，先喂真实状态
       followCurrentDesktop(win); // 从建窗到就绪这一两秒里人也可能切了桌面
       win.showInactive(); // 不抢焦点：人正打着字，光标不能被挂件夺走
+      assertDueWindowOnTop(); // 首帧就压在最上面，不等下一次广播
     };
     win.once('ready-to-show', () => {
       dueReveal = reveal;
       if (dueShown) reveal(); // 常态就是这条：窗口是到点现建的，建好即现身
     });
+  }
+
+  // 置顶在 Windows 上不是设一次就完事的：Win11 有已知系统 bug，开关画图 / 照片之类应用后
+  // 置顶窗会暂时失去 z-order 优先级（Microsoft Q&A 自 2025 年起多起报告，至今未修）；
+  // 跨虚拟桌面挪窗之后的 z-order 也无从保证；别的置顶窗被激活时同样会浮到小窗之上。
+  // 和遮罩一个办法（见 assertOverlaysOnTop）：只要小窗还露着，每次广播重申一次，
+  // 被压住最多半秒内自愈。不动焦点，不影响人手头的输入。
+  // 只对已经真正显示的窗口做：moveTop 带 SWP_SHOWWINDOW，会把还没就绪的窗口提前拉出来。
+  function assertDueWindowOnTop() {
+    if (!dueShown || !dueWindow || dueWindow.isDestroyed() || !dueWindow.isVisible()) return;
+    dueWindow.setAlwaysOnTop(true, 'screen-saver');
+    dueWindow.moveTop();
   }
 
   // 折叠/展开小窗：钉住右下角改尺寸，人把它拖到过哪就在哪原地缩放
@@ -792,8 +811,9 @@ function main() {
     const state = fullState();
     ensureOverlays(state);
     ensureDueWindow(state);
+    followWindowsAcrossDesktops(); // 先挪桌面再重申置顶：挪完的 z-order 不可信，同一拍就压回去
     assertOverlaysOnTop();
-    followWindowsAcrossDesktops();
+    assertDueWindowOnTop();
     sendAll('state', state);
     updateTray(state);
     checkOverworkNotice(state);
