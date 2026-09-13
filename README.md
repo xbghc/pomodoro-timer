@@ -90,9 +90,12 @@ story 里的界面就是应用里的界面——HTML 和 CSS 由 Vite 以 `?raw`
 每个 story 装在一个同源 `<iframe>` 里，宽高照抄主进程建窗时的尺寸（三个窗口的样式都写在 `body` 上，
 不隔开会互相污染）。假数据在 `stories/lib/fixtures.js`，形状照搬主进程 `fullState()` 广播的那份。
 
+在线版跟着 main 分支走：每次推到 main，GitHub Actions（`.github/workflows/storybook.yml`）
+就重新构建并发布到 GitHub Pages，地址是 <https://xbghc.github.io/pomodoro-timer/>。
+本地要出一份静态站用 `npm run build-storybook`，产物在 `storybook-static/`。
+
 Storybook 只是开发期工具：Vite 与 Storybook 都在 devDependencies，`stories/` 与 `.storybook/`
 不在 electron-builder 的打包范围里，应用本身仍然不带打包器、不带前端框架。
-`npm run build-storybook` 可导出静态站到 `storybook-static/`。
 
 ## 构建 Windows 安装包
 

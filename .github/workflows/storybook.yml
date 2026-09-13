@@ -1,0 +1,56 @@
+name: Deploy Storybook
+
+# 界面目录跟着 main 走：每次推到 main 就重新构建并发布到 GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只发布一份，排队而不是互相取消，免得后一次构建把前一次的部署打断
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # 只构建界面目录，用不到 Electron 二进制；仓库 .npmrc 指的是国内镜像，runner 上拉它既慢又没必要
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建 Storybook
+        run: npm run build-storybook
+
+      - uses: actions/configure-pages@v5
+        # 仓库还没开 Pages 时顺手开上，并把来源设为 GitHub Actions
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: storybook-static
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
