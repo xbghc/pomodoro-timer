@@ -94,6 +94,10 @@ story 里的界面就是应用里的界面——HTML 和 CSS 由 Vite 以 `?raw`
 就重新构建并发布到 GitHub Pages，地址是 <https://xbghc.github.io/pomodoro-timer/>。
 本地要出一份静态站用 `npm run build-storybook`，产物在 `storybook-static/`。
 
+仓库第一次用这条流水线时要手动开一次 Pages：Settings → Pages → Build and deployment →
+Source 选 **GitHub Actions**。Actions 自带的令牌没有开启 Pages 的权限，这一步只能在网页上点，
+开过之后重跑一次工作流即可，之后都是全自动。
+
 Storybook 只是开发期工具：Vite 与 Storybook 都在 devDependencies，`stories/` 与 `.storybook/`
 不在 electron-builder 的打包范围里，应用本身仍然不带打包器、不带前端框架。
 

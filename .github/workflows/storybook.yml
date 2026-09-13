@@ -36,8 +36,9 @@ jobs:
       - name: 构建 Storybook
         run: npm run build-storybook
 
+      # 仓库要先在 Settings → Pages 里把来源设成 GitHub Actions：Actions 自带的令牌
+      # 没有创建 Pages 站点的权限，enablement 只在已有站点时是个空操作
       - uses: actions/configure-pages@v5
-        # 仓库还没开 Pages 时顺手开上，并把来源设为 GitHub Actions
         with:
           enablement: true
 
