@@ -23,9 +23,9 @@ jobs:
       # 只构建界面目录，用不到 Electron 二进制；仓库 .npmrc 指的是国内镜像，runner 上拉它既慢又没必要
       ELECTRON_SKIP_BINARY_DOWNLOAD: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
