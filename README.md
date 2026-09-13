@@ -2,7 +2,7 @@
 
 Windows 桌面番茄钟。核心理念：**到点先提醒、不打断，真去休息时再把你从屏幕前拉起来**——番茄到点只在右下角挂一个小窗，点了才进全屏休息遮罩；拖着不休息的时间会算进下一次休息，超过健康上限就变红催你。
 
-Electron + 纯 JavaScript（无前端框架、无打包器），数据全部保存在本机，不联网。
+Electron + 纯 JavaScript（无前端框架、无打包器），数据全部保存在本机，不联网。界面各状态另有一份 Storybook 目录，见「开发」。
 
 ## 功能规格
 
@@ -59,10 +59,12 @@ src/main/preload.js      contextBridge 安全桥
 src/renderer/main.*      主窗口（计时/历史/设置三个页签）
 src/renderer/overlay.*   全屏休息遮罩
 src/renderer/due.*       「该休息了」的右下角小窗
+src/renderer/views/*     三个窗口的纯视图层（只吃 (root, 数据)，应用与 Storybook 共用）
 src/renderer/sound.js    WebAudio 合成提示音（无音频素材）
 scripts/generate-icons.js 程序化生成番茄图标（零依赖 PNG/ICO 编码）
 scripts/smoke.js         xvfb 下的端到端冒烟测试（逐步截图）
 test/                    状态机单元测试（node:test）
+stories/                 Storybook：三个窗口的各种状态（仅开发用，不进安装包）
 ```
 
 ## 开发
@@ -71,9 +73,26 @@ test/                    状态机单元测试（node:test）
 npm install
 npm test              # 状态机单元测试
 npm start             # 本地运行（需要图形环境）
+npm run storybook     # 界面目录（默认 6006 端口）
 npm run icons         # 重新生成图标
 xvfb-run -a node scripts/smoke.js   # 无头环境端到端冒烟 + 截图
 ```
+
+### Storybook
+
+三个窗口（主窗口、「该休息了」小窗、休息遮罩）的各种状态在浏览器里逐格摆开，不用真等 25 分钟、
+也不用装 Windows 才能看到某个状态长什么样：拖堂变红、长休息、副屏遮罩、更新就绪的设置页都点一下就到。
+
+story 里的界面就是应用里的界面——HTML 和 CSS 由 Vite 以 `?raw` 原样读 `src/renderer` 下的文件
+（只摘掉 `<script>` 和 CSP `<meta>`），渲染调的是 `src/renderer/views/*-view.js`，
+也就是应用运行时用的同一批函数。这几个视图模块只吃 `(root, 数据)`、不碰 `window.api`，
+`main.js` / `overlay.js` / `due.js` 则只剩 IPC 接线，两边因此不会走样。
+每个 story 装在一个同源 `<iframe>` 里，宽高照抄主进程建窗时的尺寸（三个窗口的样式都写在 `body` 上，
+不隔开会互相污染）。假数据在 `stories/lib/fixtures.js`，形状照搬主进程 `fullState()` 广播的那份。
+
+Storybook 只是开发期工具：Vite 与 Storybook 都在 devDependencies，`stories/` 与 `.storybook/`
+不在 electron-builder 的打包范围里，应用本身仍然不带打包器、不带前端框架。
+`npm run build-storybook` 可导出静态站到 `storybook-static/`。
 
 ## 构建 Windows 安装包
 

@@ -9,6 +9,8 @@
     "start": "electron .",
     "test": "node --test",
     "icons": "node scripts/generate-icons.js",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "dist": "electron-builder --win nsis"
   },
   "build": {
@@ -54,9 +56,12 @@
     }
   },
   "devDependencies": {
+    "@storybook/addon-docs": "^10.6.0",
+    "@storybook/html-vite": "^10.6.0",
     "electron": "^43.3.0",
     "electron-builder": "^26.15.3",
-    "playwright-core": "^1.62.1"
+    "playwright-core": "^1.62.1",
+    "storybook": "^10.6.0"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

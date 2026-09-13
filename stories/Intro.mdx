@@ -1,0 +1,37 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="介绍" />
+
+# 番茄钟的界面目录
+
+这个 Storybook 把应用的三个窗口——主窗口、「该休息了」右下角小窗、全屏休息遮罩——
+按真实状态一格一格摆出来，不用真等 25 分钟、也不用装 Windows 才能看到某个状态长什么样。
+
+## 它和真实应用共用什么
+
+每个 story 都直接读 `src/renderer` 下的真身，没有另写一份界面：
+
+- **HTML** 用 `?raw` 原样导入（`main.html` / `due.html` / `overlay.html`），只摘掉 `<script>` 和 CSP `<meta>`
+- **CSS** 同样 `?raw` 导入，一个字符没改
+- **渲染逻辑** 来自 `src/renderer/views/*-view.js`，应用运行时调的就是这几个函数
+
+三个 `*-view.js` 是纯视图层：只吃 `(root, 数据)`，不碰 `window.api`、不留模块级状态。
+真实应用里的 `main.js` / `overlay.js` / `due.js` 只剩接线——IPC、按钮绑定、本地状态。
+所以界面改了 story 会跟着变，story 不会和应用走样。
+
+## 窗口怎么摆
+
+每个 story 是一个同源 `<iframe>`，宽高照抄主进程建窗时的尺寸：主窗口 440×660，
+小窗展开 312×62、收起 40×40；遮罩按 1920×1080 渲染再整体缩到一半看。
+套 iframe 是必须的——三个窗口的样式都写在 `body` 上，直接放进画布会互相污染。
+
+## 加一个 story
+
+状态数据都在 `stories/lib/fixtures.js`，形状照搬主进程 `fullState()` 广播的那份，
+新状态优先在那里加工厂函数，再在对应的 `*.stories.js` 里引用。
+主窗口另有 `stories/lib/main-window.js` 封好了取景框，传 `tab` 就能切到历史或设置页。
+
+```bash
+npm run storybook        # 开发，默认 6006 端口
+npm run build-storybook  # 导出静态站到 storybook-static/
+```
