@@ -29,6 +29,9 @@ const FAST_SETTINGS = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 小窗 hover 展开/缩回的延时上限（due.js 的 HOVER_IN_MS / HOVER_OUT_MS），等它一轮走完
+const HOVER_MS = 800;
+
 // 隐藏窗口里 rAF 会被节流，waitForFunction 不可靠；改用 CDP 直通的 evaluate 轮询
 async function waitFor(fn, desc, timeout = 30000) {
   const t0 = Date.now();
@@ -157,22 +160,61 @@ async function main() {
   await shot(duePage, '05-due-overwork.png');
   assert(!(await overlayVisible()), '拖了这么久也没被强制盖遮罩');
 
-  // 收起 → 缩成右下角小把手（健康色跟着走），再点一下展开回卡片
+  // 收起 → 缩成贴着屏幕右缘的窄把手（健康色跟着走）
+  // xvfb 只有一块屏，主屏就是最右那块；多屏挑哪块由 test/due-layout.test.js 覆盖
+  const workArea = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
+  const rightEdge = workArea.x + workArea.width;
+  // 盖住屏幕最后一列像素（窗口故意往屏外多伸一点，防 DIP 舍入差出一列）
+  const coversEdge = (b) => b.x < rightEdge - 1 && b.x + b.width >= rightEdge;
   const expanded = await windowBounds(DUE_TITLE);
+  assert(coversEdge(expanded), '展开态也贴着屏幕右缘');
   await duePage.click('#btnCollapse');
   await sleep(300);
   const collapsed = await windowBounds(DUE_TITLE);
   await shot(duePage, '06-due-collapsed.png');
-  assert(
-    collapsed.width < expanded.width && collapsed.height < expanded.height,
-    '收起后小窗缩成把手'
-  );
+  assert(collapsed.width < expanded.width, '收起后小窗缩成窄把手');
+  assert(coversEdge(collapsed), '把手贴死屏幕右缘，鼠标往右一甩就撞上');
+  // 把手的矩形必须整个落在卡片矩形里，展开只向左长：否则窗口会从指针底下挪走，
+  // 指针落到窗外立刻又缩回去，来回抖（见 main.js 的 dueBounds）
   assert(
     collapsed.x + collapsed.width === expanded.x + expanded.width &&
-      collapsed.y + collapsed.height === expanded.y + expanded.height,
-    '收起时右下角钉住不动'
+      collapsed.y === expanded.y &&
+      collapsed.height === expanded.height &&
+      collapsed.x >= expanded.x,
+    '把手落在展开态矩形之内'
   );
-  assert(await dueVisible(), '收起不是关掉：窗口还在，只是变小了');
+  assert(await dueVisible(), '收起不是关掉：窗口还在，只是变窄了');
+
+  // 刚点完「›」时指针还停在把手那片位置上，这时不能自己又掀开；先让页面认一次「鼠标离开过」
+  const leaveWindow = () =>
+    duePage.evaluate(() =>
+      document.body.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))
+    );
+  await sleep(HOVER_MS);
+  assert((await windowBounds(DUE_TITLE)).width === collapsed.width, '点收起后指针没挪，不自己展开');
+
+  // 鼠标蹭到把手上 → 自动展开（CDP 的 mouse.move 发的是真 DOM mousemove，走的就是线上那条路）
+  await leaveWindow();
+  await duePage.mouse.move(5, Math.round(collapsed.height / 2));
+  await waitFor(
+    async () => (await windowBounds(DUE_TITLE)).width === expanded.width,
+    '鼠标蹭到把手就展开'
+  );
+  const hovered = await windowBounds(DUE_TITLE);
+  assert(
+    hovered.x + hovered.width === collapsed.x + collapsed.width,
+    '展开后右缘还在原处，指针不会被甩到窗外'
+  );
+
+  // 鼠标一走，蹭出来的展开自己缩回去。
+  // xvfb 下没法把系统指针挪到窗口外面，这里直接发 mouseout，测的是处理逻辑而非系统的离开通知。
+  await leaveWindow();
+  await waitFor(
+    async () => (await windowBounds(DUE_TITLE)).width === collapsed.width,
+    '鼠标离开后缩回把手'
+  );
+
+  // 点把手一样能展开（键盘 / 手快的情况），这种展开不会自己缩回去
   await duePage.click('#btnExpand');
   await sleep(300);
   const reExpanded = await windowBounds(DUE_TITLE);
@@ -180,6 +222,9 @@ async function main() {
     reExpanded.width === expanded.width && reExpanded.height === expanded.height,
     '展开后回到原尺寸'
   );
+  await leaveWindow();
+  await sleep(HOVER_MS);
+  assert((await windowBounds(DUE_TITLE)).width === expanded.width, '点开的不会被鼠标带走');
 
   // 点「去休息」才真正进入休息，遮罩这时才盖上
   const overlay2 = overlay1;
