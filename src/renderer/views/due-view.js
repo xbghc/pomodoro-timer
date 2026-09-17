@@ -19,7 +19,7 @@
     root.dataset.overwork = state.overwork;
   }
 
-  // 收起 = 缩成右下角一个小把手：让开地方，但健康色还在余光里
+  // 收起 = 缩成贴着屏幕右缘的一条窄把手：让开地方，但健康色还在余光里
   function setCollapsed(root, collapsed) {
     root.dataset.collapsed = collapsed ? 'true' : 'false';
   }

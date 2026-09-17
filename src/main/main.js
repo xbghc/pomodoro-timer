@@ -17,6 +17,7 @@ const { autoUpdater } = require('electron-updater');
 const { PomodoroTimer, DEFAULT_CONFIG } = require('./timer-core');
 const { Store } = require('./store');
 const { followCurrentDesktop } = require('./virtual-desktop');
+const { dueBounds } = require('./due-layout');
 const {
   DEFAULT_SCHEDULE,
   sanitizeSchedule,
@@ -36,13 +37,6 @@ const PREBUILD_MS = 30 * 1000;
 // 不限次数、不补时长 —— 遮罩上本就摆着更省事的「跳过休息」，让开的摩擦反而更大，
 // 没人会拿它绕过休息；花掉的是休息时间本身，倒计时照常走。
 const AWAY_MS = 30 * 1000;
-
-// 「该休息了」小窗的两态尺寸：展开是完整卡片，收起只剩一个贴右下角的小把手。
-// 收起后仍带着健康色（绿/琥珀/红），让开了地方但不丢提醒。
-const DUE_SIZE = {
-  expanded: { width: 312, height: 62 },
-  collapsed: { width: 40, height: 40 },
-};
 
 const DEFAULT_SETTINGS = {
   ...DEFAULT_CONFIG,
@@ -540,14 +534,8 @@ function main() {
   }
 
   function createDueWindow() {
-    const wa = screen.getPrimaryDisplay().workArea; // 用 workArea 而非 bounds：贴右下角但不压任务栏
-    const { width, height } = DUE_SIZE.expanded;
-    const margin = 16;
     const win = new BrowserWindow({
-      x: wa.x + wa.width - width - margin,
-      y: wa.y + wa.height - height - margin,
-      width,
-      height,
+      ...placeDue(false),
       frame: false,
       thickFrame: false, // 同遮罩：去掉 DWM 给无边框窗口画的 1px 白线
       alwaysOnTop: true,
@@ -574,6 +562,9 @@ function main() {
       win.webContents.send('state', fullState()); // 建窗期间页面停在预填值，先喂真实状态
       followCurrentDesktop(win); // 从建窗到就绪这一两秒里人也可能切了桌面
       win.showInactive(); // 不抢焦点：人正打着字，光标不能被挂件夺走
+      // 同遮罩：混合 DPI 下再钉一次。小窗可能被挑到副屏上，建窗那一下按主屏缩放换算，
+      // 位置尺寸会差一截，贴不住右缘（现身前还没法点，此刻必是展开态）
+      win.setBounds(placeDue(false));
       assertDueWindowOnTop(); // 首帧就压在最上面，不等下一次广播
     };
     win.once('ready-to-show', () => {
@@ -594,16 +585,16 @@ function main() {
     dueWindow.moveTop();
   }
 
-  // 折叠/展开小窗：钉住右下角改尺寸，人把它拖到过哪就在哪原地缩放
+  // 小窗贴在哪块屏的右缘、两态各占哪块矩形，都在 due-layout.js 里算；这里只喂当下的显示器布局。
+  // 插拔显示器由 refreshWindows 整个重建小窗，自然会重新挑屏。
+  function placeDue(collapsed) {
+    return dueBounds(screen.getAllDisplays(), screen.getPrimaryDisplay().id, collapsed);
+  }
+
+  // 折叠/展开小窗：右缘钉死，卡片只向左伸缩
   function setDueCollapsed(collapsed) {
     if (!dueWindow || dueWindow.isDestroyed()) return false;
-    const size = collapsed ? DUE_SIZE.collapsed : DUE_SIZE.expanded;
-    const b = dueWindow.getBounds();
-    dueWindow.setBounds({
-      x: b.x + b.width - size.width,
-      y: b.y + b.height - size.height,
-      ...size,
-    });
+    dueWindow.setBounds(placeDue(collapsed));
     return true;
   }
 

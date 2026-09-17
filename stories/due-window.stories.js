@@ -5,9 +5,9 @@ import dueCss from '../src/renderer/due.css?raw';
 import { windowFrame } from './lib/frame.js';
 import { breakDueState } from './lib/fixtures.js';
 
-// 与 main.js 里 DUE_SIZE 一致
+// 与 src/main/due-layout.js 里 DUE_SIZE 一致（那边是 CommonJS，这里不直接导入）
 const EXPANDED = { width: 312, height: 62 };
-const COLLAPSED = { width: 40, height: 40 };
+const COLLAPSED = { width: 18, height: 62 };
 
 function dueWindow({ state, collapsed = false, note }) {
   const size = collapsed ? COLLAPSED : EXPANDED;
@@ -23,7 +23,8 @@ export default {
     docs: {
       description: {
         component:
-          '番茄到点后挂在屏幕右下角的小窗（312×62），不抢焦点、可拖走，也可以点「›」收成 40×40 的小把手。' +
+          '番茄到点后贴着屏幕右缘挂在右下角的小窗（312×62），不抢焦点；点「›」收成 18×62 的窄把手，' +
+          '鼠标往右一甩蹭上把手就展开、移开又缩回。' +
           '拖着不休息的时间越长整块越红：绿 → 琥珀 → 红，收起后这层健康色仍在余光里。',
       },
     },
@@ -65,6 +66,6 @@ export const LongBreakDue = {
 
 export const Collapsed = {
   name: '收起成把手',
-  parameters: { docs: { description: { story: '收起只是换了窗口尺寸，计时不受影响；整块染成当前健康色。' } } },
+  parameters: { docs: { description: { story: '收起只是换了窗口尺寸，计时不受影响；整条染成当前健康色，中间一道压痕示意能拉开。' } } },
   args: { workedMin: 75, collapsed: true },
 };
