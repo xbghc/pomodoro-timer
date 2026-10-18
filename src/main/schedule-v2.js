@@ -1,26 +1,19 @@
 'use strict';
-
-// This file is a schema and computation layer; the JSON schedule is user-editable.
 const DEFAULT_SCHEDULE = {
   defaultTemplate: 'workday',
   weekdays: { '0': 'off', '1': 'workday', '2': 'workday', '3': 'workday', '4': 'workday', '5': 'workday', '6': 'off' },
-  templates: {
-    workday: [
-      { start: '10:00', end: '12:00' },
-      { start: '13:30', end: '18:00' },
-      { start: '19:30', end: '22:30' },
-    ],
-    off: [],
-  },
+  templates: { workday: [
+    { start: '10:00', end: '12:00' }, { start: '13:30', end: '18:00' }, { start: '19:30', end: '22:30' },
+  ], off: [] },
 };
-
+const own = (object, key) => Object.hasOwn(object, key);
+const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 function minutes(hm) {
   if (typeof hm !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hm)) return null;
   return Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3));
 }
 function dateKey(date) {
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0')].join('-');
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 function dateFromKey(key) {
   if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) throw new Error('Invalid date');
@@ -30,51 +23,42 @@ function dateFromKey(key) {
   return date;
 }
 function validateSchedule(config) {
-  if (!config || typeof config !== 'object' || !config.templates || typeof config.templates !== 'object') {
-    throw new Error('schedule.json must define templates');
-  }
+  if (!object(config) || !object(config.templates) || !Object.keys(config.templates).length) throw new Error('schedule.json must define templates');
   for (const [name, ranges] of Object.entries(config.templates)) {
-    if (!Array.isArray(ranges)) throw new Error('Template must be an array: ' + name);
+    if (!name.trim() || !Array.isArray(ranges)) throw new Error('Template must be a named array: ' + name);
     let prevEnd = -1;
     for (const range of ranges) {
-      const start = minutes(range && range.start);
-      const end = minutes(range && range.end);
-      if (start === null || end === null || start >= end || start < prevEnd) {
-        throw new Error('Invalid or overlapping schedule block in template: ' + name);
-      }
+      const start = minutes(range?.start), end = minutes(range?.end);
+      if (start === null || end === null || start >= end || start < prevEnd) throw new Error('Invalid or overlapping block: ' + name);
       prevEnd = end;
     }
   }
-  if (!(config.defaultTemplate in config.templates)) throw new Error('Unknown default template');
-  for (const name of Object.values(config.weekdays || {})) {
-    if (!(name in config.templates)) throw new Error('Unknown weekday template: ' + name);
+  if (typeof config.defaultTemplate !== 'string' || !own(config.templates, config.defaultTemplate)) throw new Error('Unknown default template');
+  if (config.weekdays !== undefined && !object(config.weekdays)) throw new Error('weekdays must be an object');
+  for (const [day, name] of Object.entries(config.weekdays || {})) {
+    if (!/^[0-6]$/.test(day) || typeof name !== 'string' || !own(config.templates, name)) throw new Error('Invalid weekday template: ' + day);
   }
   return config;
 }
-function templateName(config, date, overrides = {}) {
-  return overrides[dateKey(date)] || (config.weekdays || {})[date.getDay()] || config.defaultTemplate;
-}
 function planForDate(config, key, overrides = {}) {
   const date = dateFromKey(key);
-  const name = templateName(config, date, overrides);
-  const ranges = config.templates[name];
-  if (!ranges) throw new Error('Unknown template: ' + name);
-  return { name, blocks: ranges.map((r) => ({ ...r })) };
+  const selected = own(overrides, key) ? overrides[key] : null;
+  // A removed template must not prevent the application from starting.
+  const name = selected && own(config.templates, selected) ? selected : config.weekdays?.[date.getDay()] ?? config.defaultTemplate;
+  return { name, blocks: config.templates[name].map((range) => ({ start: range.start, end: range.end })) };
+}
+function dayBounds(key) {
+  const start = dateFromKey(key), end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { startAt: start.getTime(), endAt: end.getTime() };
+}
+function planWindows(config, key, overrides = {}) {
+  const date = dateFromKey(key), plan = planForDate(config, key, overrides);
+  const at = (hm) => { const d = new Date(date); const n = minutes(hm); d.setHours(Math.floor(n / 60), n % 60, 0, 0); return d.getTime(); };
+  return plan.blocks.map((block, i) => ({ ...block, id: `${key}:${plan.name}:${i}`, startAt: at(block.start), endAt: at(block.end) }));
 }
 function windowAt(config, date, overrides = {}) {
-  const day = dateKey(date);
-  const plan = planForDate(config, day, overrides);
-  const now = date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
-  for (let i = 0; i < plan.blocks.length; i++) {
-    const block = plan.blocks[i];
-    const start = minutes(block.start);
-    const end = minutes(block.end);
-    if (now >= start && now < end) {
-      const [h, m] = block.end.split(':').map(Number);
-      const endAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m).getTime();
-      return { id: day + ':' + plan.name + ':' + i, endAt, ...block };
-    }
-  }
-  return null;
+  const at = date.getTime();
+  return planWindows(config, dateKey(date), overrides).find((block) => at >= block.startAt && at < block.endAt) || null;
 }
-module.exports = { DEFAULT_SCHEDULE, minutes, dateKey, dateFromKey, validateSchedule, planForDate, windowAt };
+module.exports = { DEFAULT_SCHEDULE, minutes, dateKey, dateFromKey, dayBounds, validateSchedule, planForDate, planWindows, windowAt };

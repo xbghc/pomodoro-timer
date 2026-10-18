@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <title>番茄钟</title>
+  <link rel="stylesheet" href="activity.css">
+  <script src="activity-view.js" defer></script>
+  <script src="activity.js" defer></script>
+</head>
+<body>
+  <p id="error" class="error" role="alert" hidden></p>
+  <main id="main" hidden>
+    <header class="topbar"><div><span class="eyebrow">ACTIVITY / DAILY</span><h1>番茄钟</h1></div><span id="version" class="muted"></span></header>
+    <section class="card focus-card" aria-label="当前活动">
+      <div><div id="phase" class="phase">等待</div><div id="clock" class="clock">00:00</div><p id="status" class="muted">等待时间不计入统计。</p></div>
+      <div class="controls">
+        <div class="row"><button data-command="startWork" class="primary">开始工作</button><button data-command="startBreak">开始休息</button><button data-command="stop">结束活动</button></div>
+        <div class="row"><label for="duration">接下来</label><input id="duration" type="number" min="1" max="1440" value="60"><span>分钟</span><button id="focus">专注</button><button id="break">休息</button></div>
+        <div class="row"><button id="focus-hour" class="quiet">再专注 1 小时</button><button id="break-twenty" class="quiet">休息 20 分钟</button></div>
+      </div>
+    </section>
+    <section class="card calendar-card" aria-labelledby="calendar-title">
+      <div class="section-header"><h2 id="calendar-title">活动日历</h2><div class="row"><button id="previous" aria-label="前一天">‹</button><input id="date" type="date" aria-label="查看日期"><button id="next" aria-label="后一天">›</button><button id="today">今天</button><button id="add-record">补录活动</button></div></div>
+      <div class="summary"><span>工作 <strong id="work-total">0 分钟</strong></span><span>休息 <strong id="break-total">0 分钟</strong></span><span id="plan-label" class="muted"></span></div>
+      <div class="lane-header"><span>时间</span><span>计划 <small>不计入统计</small></span><span>实际 <small>点击已结束活动编辑</small></span></div>
+      <div id="calendar-scroll" class="calendar-scroll"><div id="calendar" class="calendar" aria-label="一天的计划与实际活动"><div id="hours" class="hours"></div><div id="plan-lane" class="lane plan-lane"></div><div id="actual-lane" class="lane actual-lane"></div></div></div>
+      <p id="empty" class="muted">这一天还没有实际记录。</p>
+      <div class="table-scroll"><table><thead><tr><th>活动</th><th>开始</th><th>结束</th><th>时长</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="records"></tbody></table></div>
+    </section>
+    <section class="card schedule-card"><div><h2>今天的工作模板</h2><p class="muted">未来计划只在 JSON 中编辑；切换模板不会改写实际记录。</p></div><div class="row"><select id="template" aria-label="今天的工作模板"></select><button id="open-schedule">打开 JSON</button><button id="reload-schedule">重新加载</button></div></section>
+    <details class="card settings"><summary>偏好设置</summary><form id="preferences"><div class="row"><label>默认专注提醒 <input name="reminderMin" type="number" min="1" max="1440" required> 分钟</label><label>默认休息 <input name="breakMin" type="number" min="1" max="1440" required> 分钟</label><label>主题 <select name="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></div><div class="row"><label><input name="soundOn" type="checkbox"> 通知声音</label><label><input name="autoStart" type="checkbox"> 登录后启动</label><button type="submit">保存设置</button><button type="button" id="check-update">检查更新</button><button type="button" id="install-update" hidden>重启并更新</button><span id="update-status" class="muted"></span></div><p class="muted">默认时长只影响下一次活动；调整当前提醒请使用上方「专注」。</p></form></details>
+  </main>
+  <section id="due" class="due-card" hidden><span class="eyebrow">BREAK REMINDER</span><h1>该休息了</h1><p id="due-status" class="muted"></p><div class="row"><button data-command="startBreak" class="primary">开始休息</button><button data-command="skipReminder">一小时后提醒</button></div><button data-command="showMain" class="quiet">打开主窗口</button></section>
+  <section id="rest" class="rest-card" hidden><span class="eyebrow">TAKE A BREAK</span><h1>离开屏幕，休息一下</h1><div id="rest-clock" class="clock">00:00</div><p class="muted">也可以在外部工具中做一次简短复盘。</p><p class="muted">休息结束后进入等待，准备好再开始工作。</p><div class="row"><button data-command="away">暂时让开 30 秒</button><button data-command="startWork" class="primary">现在开始工作</button><button data-command="stop">结束活动</button></div></section>
+  <dialog id="record-dialog"><form id="record-form"><h2 id="record-title">补录活动</h2><label>类型<select name="type"><option value="work">工作</option><option value="break">休息</option></select></label><label>开始<input name="startedAt" type="datetime-local" step="0.001" required></label><label>结束<input name="endedAt" type="datetime-local" step="0.001" required></label><p class="muted">只记录已经发生的活动；不能与其他实际记录或当前活动重叠。</p><p id="record-error" class="error" role="alert" hidden></p><div class="row"><button type="button" id="delete-record" class="danger" hidden>删除</button><span class="spacer"></span><button type="button" id="cancel-record">取消</button><button type="submit" class="primary">保存</button></div></form></dialog>
+</body>
+</html>
