@@ -9,20 +9,29 @@ const { ActivityTimer, MIN } = require('../src/main/activity-core');
 const { ActivityStore } = require('../src/main/activity-store');
 const { DEFAULT_SCHEDULE, validateSchedule, planForDate, windowAt } = require('../src/main/schedule-v2');
 
+function advance(clock, setTime, current, durationMs) {
+  const target = current + durationMs;
+  for (let at = current + 30_000; at < target; at += 30_000) {
+    setTime(at);
+    clock.tick();
+  }
+  setTime(target);
+  clock.tick();
+}
+
 test('reminders do not split continuous work intervals', () => {
   let time = 1_000_000;
   const clock = new ActivityTimer({ now: () => time, workMin: 30 });
   const records = [];
   clock.on('record', (r) => records.push(r));
   clock.startWork();
-  time += 20 * MIN;
+  advance(clock, (v) => { time = v; }, time, 20 * MIN);
   clock.remindIn(60);
-  time += 60 * MIN;
-  clock.tick();
+  advance(clock, (v) => { time = v; }, time, 60 * MIN);
   assert.equal(clock.getState().phase, 'work');
   assert.equal(clock.getState().reminderDue, true);
   assert.equal(records.length, 0);
-  time += 10 * MIN;
+  advance(clock, (v) => { time = v; }, time, 10 * MIN);
   clock.startBreak({ minutes: 20 });
   assert.equal(records.length, 1);
   assert.equal(records[0].endedAt - records[0].startedAt, 90 * MIN);
@@ -32,8 +41,7 @@ test('skipping reminders defers by an hour without changing activity', () => {
   let time = 1000;
   const clock = new ActivityTimer({ now: () => time, workMin: 30 });
   clock.startWork();
-  time += 30 * MIN;
-  clock.tick();
+  advance(clock, (v) => { time = v; }, time, 30 * MIN);
   assert.equal(clock.getState().reminderDue, true);
   clock.skipReminder();
   assert.equal(clock.getState().reminderAt, time + 60 * MIN);
@@ -46,10 +54,9 @@ test('fixed schedule boundary takes priority over manual focus extension', () =>
   const records = [];
   clock.on('record', (r) => records.push(r));
   clock.startWork({ boundaryAt: time + 30 * MIN });
-  time += 20 * MIN;
+  advance(clock, (v) => { time = v; }, time, 20 * MIN);
   clock.remindIn(60);
-  time += 11 * MIN;
-  clock.tick();
+  advance(clock, (v) => { time = v; }, time, 11 * MIN);
   assert.equal(clock.getState().phase, 'waiting');
   assert.equal(records[0].endedAt - records[0].startedAt, 30 * MIN);
 });
