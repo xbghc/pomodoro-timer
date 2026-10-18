@@ -13,7 +13,7 @@ class ActivityService extends EventEmitter {
     this.preferences = store.preferences();
     store.records(); // Corrupt data is an error, never an empty history.
     store.recover();
-    this.notBefore = store.records().reduce((latest, record) => Math.max(latest, record.endedAt), 0);
+    this._refreshRecordingBoundary();
     this.timer = new ActivityTimer({ now, workMin: this.preferences.reminderMin, breakMin: this.preferences.breakMin });
     this.previousWindow = undefined;
     this.suspended = false;
@@ -26,6 +26,13 @@ class ActivityService extends EventEmitter {
     });
     for (const event of ['break-due', 'break-over', 'boundary']) this.timer.on(event, () => this.emit(event));
   }
+  _assertRunning() {
+    if (this.suspended) throw new Error('Timer is suspended');
+  }
+  _refreshRecordingBoundary() {
+    // Manual edits and deletions must participate in the same no-overlap rule as timed records.
+    this.notBefore = this.store.records().reduce((latest, record) => Math.max(latest, record.endedAt), 0);
+  }
   currentWindow() { return windowAt(this.schedule, new Date(this.now()), this.preferences.dayTemplates); }
   boundary() { return this.currentWindow()?.endAt ?? null; }
   _checkpoint(force = false) {
@@ -35,6 +42,7 @@ class ActivityService extends EventEmitter {
     }
   }
   _reconcile(reconfigured = false) {
+    if (this.suspended) return;
     // Wall-clock rollback must not create overlapping automatic records.
     if (this.now() < this.notBefore) { this.previousWindow = undefined; return; }
     const current = this.currentWindow(), previous = this.previousWindow;
@@ -67,7 +75,7 @@ class ActivityService extends EventEmitter {
       clockBlockedUntil: this.notBefore > this.now() ? this.notBefore : null };
   }
   command(name, value) {
-    if (this.suspended) throw new Error('Timer is suspended');
+    this._assertRunning();
     this.tick();
     if (this.now() < this.notBefore) throw new Error('System clock moved backwards; recording is paused until the last recorded time');
     let result;
@@ -95,12 +103,14 @@ class ActivityService extends EventEmitter {
   }
   close() { this.suspend(); }
   reloadSchedule() {
+    this._assertRunning();
     const next = this.store.schedule(); // Validate before replacing the last known-good schedule.
     this.tick(); this.schedule = next; this._reconcile(true);
     this.revision++; this._checkpoint(true);
     return this.state();
   }
   selectTodayTemplate(name) {
+    this._assertRunning();
     if (typeof name !== 'string' || !Object.hasOwn(this.schedule.templates, name)) throw new Error('Unknown template');
     this.tick();
     this.preferences = this.store.savePreferences({ dayTemplates: { [dateKey(new Date(this.now()))]: name } });
@@ -108,6 +118,7 @@ class ActivityService extends EventEmitter {
     return this.state();
   }
   savePreferences(patch) {
+    this._assertRunning();
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid preferences');
     const allowed = ['reminderMin', 'breakMin', 'soundOn', 'theme', 'autoStart'];
     if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown preference');
@@ -124,6 +135,7 @@ class ActivityService extends EventEmitter {
       template: planForDate(this.schedule, key, this.preferences.dayTemplates).name, revision: this.revision };
   }
   saveRecord(payload) {
+    this._assertRunning();
     if (!payload || typeof payload !== 'object') throw new Error('Invalid activity record');
     this.tick();
     const records = this.store.records();
@@ -135,10 +147,13 @@ class ActivityService extends EventEmitter {
     if (active.startedAt !== null && record.endedAt > active.startedAt) throw new Error('Record overlaps the ongoing activity; stop it before editing');
     if (records.some((r) => r.id !== existing?.id && record.startedAt < r.endedAt && record.endedAt > r.startedAt)) throw new Error('Activity records cannot overlap');
     const result = existing ? this.store.update(existing.id, record) : this.store.create(record);
+    this._refreshRecordingBoundary();
     this.revision++; return result;
   }
   deleteRecord(id) {
+    this._assertRunning();
     if (typeof id !== 'string' || !this.store.delete(id)) throw new Error('Record not found');
+    this._refreshRecordingBoundary();
     this.revision++; return true;
   }
 }

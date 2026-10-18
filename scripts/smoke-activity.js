@@ -11,7 +11,11 @@ const root = path.resolve(__dirname, '..');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pomodoro-smoke-'));
 const results = path.join(root, 'test-results');
 fs.mkdirSync(results, { recursive: true });
-fs.writeFileSync(path.join(dir, 'schedule.json'), JSON.stringify({ defaultTemplate: 'always', templates: { always: [{ start: '00:00', end: '23:59' }], off: [] } }));
+const schedulePath = path.join(dir, 'schedule.json');
+// Manual work has no fixed deadline, so this test is not sensitive to midnight or 23:59.
+// Automatic schedule boundaries are covered by the deterministic service tests.
+const scheduleJSON = JSON.stringify({ defaultTemplate: 'manual', templates: { manual: [], off: [] } });
+fs.writeFileSync(schedulePath, scheduleJSON);
 fs.writeFileSync(path.join(dir, 'history.json'), 'legacy-data-must-stay-untouched');
 let application, page;
 const errors = [], logs = [];
@@ -33,6 +37,10 @@ async function waitState(accept, description) {
   }, accept, { description });
 }
 async function readDay(key) { return page.evaluate((date) => window.activity.day(date), key); }
+async function roleWindow(role) {
+  return waitFor(async () => application.windows().find((window) => new URL(window.url()).searchParams.get('role') === role),
+    Boolean, { description: `real ${role} window` });
+}
 (async () => {
   try {
     await launch();
@@ -43,10 +51,24 @@ async function readDay(key) { return page.evaluate((date) => window.activity.day
     assert.equal(focused.id, before.id);
     assert.equal(focused.startedAt, before.startedAt);
     assert.ok(Math.abs(focused.reminderAt - focused.now - 60 * 60_000) < 2000);
+
+    // Trigger and dismiss a real reminder; neither operation closes the working interval.
+    await page.evaluate(() => window.activity.command('focus', 0.05));
+    const dueState = await waitState((state) => state.reminderDue, 'work reminder to become due');
+    assert.equal(dueState.phase, 'work');
+    assert.equal(dueState.id, before.id);
+    const due = await roleWindow('due');
+    await due.locator('#due').waitFor({ state: 'visible' });
+    await due.screenshot({ path: path.join(results, 'activity-reminder.png') });
+    await due.locator('#due [data-command="skipReminder"]').click();
+    const snoozed = await waitState((state) => !state.reminderDue && state.reminderAt - state.now > 59 * 60_000, 'reminder snooze');
+    assert.equal(snoozed.id, before.id);
+    assert.equal(snoozed.startedAt, before.startedAt);
+    await waitFor(async () => due.isClosed(), Boolean, { description: 'dismissed reminder window to close' });
+
     await page.locator('#break-twenty').click();
     await waitState((state) => state.phase === 'break', 'rest to start');
-    const overlay = await waitFor(async () => application.windows().find((window) => new URL(window.url()).searchParams.get('role') === 'break'),
-      Boolean, { description: 'real rest overlay' });
+    const overlay = await roleWindow('break');
     await overlay.locator('#rest').waitFor({ state: 'visible' });
     await overlay.screenshot({ path: path.join(results, 'activity-rest.png') });
     // Shorten an already-loaded break; keep the same activity ID and wait for actual completion.
@@ -78,13 +100,16 @@ async function readDay(key) { return page.evaluate((date) => window.activity.day
     const saved = await waitFor(() => readDay(date), (day) => day.records.some((record) => record.startedAt === new Date(inputs.start).getTime()), { description: 'calendar insertion' });
     const manual = saved.records.find((record) => record.startedAt === new Date(inputs.start).getTime());
     assert.equal(manual.type, 'work');
+    assert.equal(manual.endedAt, new Date(inputs.end).getTime());
     await page.screenshot({ path: path.join(results, 'activity-main.png'), fullPage: true });
     // The manual record starts before this launch, so it is the first table row.
     await page.locator('#records tr').first().getByRole('button', { name: '编辑' }).click();
     await page.locator('#record-form [name=type]').selectOption('break');
     await page.locator('#record-form button[type=submit]').click();
     await page.waitForFunction(() => !document.getElementById('record-dialog').open);
-    await waitFor(() => readDay(date), (day) => day.records.find((record) => record.id === manual.id)?.type === 'break', { description: 'calendar edit' });
+    const edited = await waitFor(() => readDay(date), (day) => day.records.find((record) => record.id === manual.id)?.type === 'break', { description: 'calendar edit' });
+    assert.deepEqual(edited.records.find((record) => record.id === manual.id), { ...manual, type: 'break' },
+      'editing only the type must preserve both timestamps to the millisecond');
     await page.locator('#records tr').first().getByRole('button', { name: '编辑' }).click();
     page.once('dialog', (dialog) => dialog.accept());
     await page.locator('#delete-record').click();
@@ -93,6 +118,20 @@ async function readDay(key) { return page.evaluate((date) => window.activity.day
 
     await page.locator('#template').selectOption('off');
     await waitState((state) => state.todayTemplate === 'off', 'template selection');
+    // An invalid external edit is reported, not silently substituted or written back over the file.
+    fs.writeFileSync(schedulePath, '{"templates":{}}');
+    await page.locator('#reload-schedule').click();
+    await page.locator('#error').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#error').innerText(), /templates/);
+    const unchanged = await page.evaluate(() => window.activity.bootstrap());
+    assert.equal(unchanged.todayTemplate, 'off');
+    assert.equal(unchanged.failure, '');
+    assert.equal(unchanged.suspended, false);
+    assert.equal(fs.readFileSync(schedulePath, 'utf8'), '{"templates":{}}');
+    fs.writeFileSync(schedulePath, scheduleJSON);
+    await page.locator('#reload-schedule').click();
+    await page.locator('#error').waitFor({ state: 'hidden' });
+
     await application.close(); application = null;
     const records = JSON.parse(fs.readFileSync(path.join(dir, 'activity-records.json'), 'utf8'));
     assert.deepEqual(records, actual, 'editing and deleting history must not rewrite automatically recorded intervals');
@@ -102,7 +141,7 @@ async function readDay(key) { return page.evaluate((date) => window.activity.day
     assert.equal(restarted.phase, 'waiting');
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'activity-records.json'), 'utf8')), records);
     assert.deepEqual(errors, []);
-    console.log('PASS: real Electron startup, preload IPC, continuous focus, rest overlay, waiting, calendar CRUD, template selection, restart persistence, and legacy isolation');
+    console.log('PASS: Electron startup, continuous focus, reminder snooze, rest overlay, waiting, precise calendar CRUD, safe JSON reload, template selection, restart persistence, and legacy isolation');
   } catch (error) {
     if (page && !page.isClosed()) {
       await page.screenshot({ path: path.join(results, 'failure.png'), fullPage: true }).catch(() => {});
