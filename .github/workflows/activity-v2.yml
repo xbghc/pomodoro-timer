@@ -1,0 +1,92 @@
+name: Activity v2 tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: activity-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: node --check src/renderer/activity.js
+  electron-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Real Electron smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:smoke
+      - name: Real Electron smoke test (Windows)
+        if: runner.os == 'Windows'
+        run: npm run test:smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: activity-v2-smoke-${{ matrix.os }}
+          path: test-results/
+          if-no-files-found: ignore
+  storybook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build-storybook
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activity-v2-storybook
+          path: storybook-static/
+  windows-package:
+    needs: [unit, electron-smoke, storybook]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate unsigned prerelease installer (never publish)
+        run: npx electron-builder --win nsis --publish never --config.extraMetadata.version=2.0.0-alpha.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activity-v2-windows-test-installer
+          path: dist/PomodoroTimer-Setup-*.exe

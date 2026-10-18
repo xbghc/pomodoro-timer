@@ -1,13 +1,14 @@
 {
   "name": "pomodoro-timer",
   "version": "1.11.0",
-  "description": "番茄钟 —— 到点先提醒、不强制的 Windows 桌面番茄钟",
+  "description": "按工作日程运行，记录真实工作与休息时间的桌面工具",
   "main": "src/main/main.js",
   "author": "ghm",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
     "test": "node --test",
+    "test:smoke": "node scripts/smoke-activity.js",
     "icons": "node scripts/generate-icons.js",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
@@ -16,34 +17,12 @@
   "build": {
     "appId": "com.ghm.pomodoro-timer",
     "productName": "番茄钟",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "xbghc",
-        "repo": "pomodoro-timer"
-      }
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "src/**/*",
-      "assets/**/*",
-      "package.json"
-    ],
-    "asarUnpack": [
-      "**/node_modules/koffi/**",
-      "**/node_modules/@koromix/**"
-    ],
+    "publish": [{ "provider": "github", "owner": "xbghc", "repo": "pomodoro-timer" }],
+    "directories": { "output": "dist" },
+    "files": ["src/**/*", "assets/**/*", "package.json"],
+    "asarUnpack": ["**/node_modules/koffi/**", "**/node_modules/@koromix/**"],
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "assets/icon.ico",
       "executableName": "PomodoroTimer",
       "artifactName": "PomodoroTimer-Setup-${version}.exe"
