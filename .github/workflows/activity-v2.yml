@@ -2,11 +2,13 @@ name: Activity v2 tests
 
 on:
   pull_request:
-  push:
-    branches: [feat/activity-schedule-v2]
 
 permissions:
   contents: read
+
+concurrency:
+  group: activity-v2-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   unit:
@@ -24,3 +26,24 @@ jobs:
         run: node --test
       - name: Check renderer syntax
         run: node --check src/renderer/activity.js
+  electron-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+      ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Real Electron smoke test
+        run: xvfb-run -a node scripts/smoke-activity.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: activity-v2-smoke
+          path: test-results/
+          if-no-files-found: ignore

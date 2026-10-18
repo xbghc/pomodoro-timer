@@ -2,6 +2,8 @@
 const electron = require('electron');
 const { startDesktop } = require('./activity-desktop');
 const { followCurrentDesktop } = require('./virtual-desktop');
+// Isolate automated smoke tests from real application data.
+if (process.env.POMODORO_DATA_DIR) electron.app.setPath('userData', process.env.POMODORO_DATA_DIR);
 if (!electron.app.requestSingleInstanceLock()) electron.app.quit();
 else electron.app.whenReady().then(() => {
   electron.app.setAppUserModelId('com.ghm.pomodoro-timer');

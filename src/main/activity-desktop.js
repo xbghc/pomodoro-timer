@@ -15,13 +15,16 @@ function startDesktop(electron, { store, now = Date.now, timers = globalThis, up
   let mainRequested = !process.argv.includes('--hidden');
   const tray = new Tray(path.join(__dirname, '../../assets/tray.png'));
   const alive = (win) => win && !win.isDestroyed();
-  const state = () => ({ ...service.state(), dark: nativeTheme.shouldUseDarkColors,
-    version: app.getVersion(), update, failure, awayUntil });
+  function state() {
+    const snapshot = service.state();
+    if (failure && snapshot.startedAt !== null) snapshot.elapsedMs = Math.max(0, service.timer.lastObservedAt - snapshot.startedAt);
+    return { ...snapshot, dark: nativeTheme.shouldUseDarkColors, version: app.getVersion(), update, awayUntil,
+      failure: failure || (snapshot.clockBlockedUntil ? '检测到系统时间回退，已暂停记录，等待时钟达到上一条记录的终点。' : '') };
+  }
   const notify = (title, body) => {
     if (!Notification.isSupported()) return;
     const notification = new Notification({ title, body, silent: !service.preferences.soundOn });
-    notification.on('click', showMain);
-    notification.show();
+    notification.on('click', showMain); notification.show();
   };
   function showMain() {
     mainRequested = true;
@@ -48,7 +51,8 @@ function startDesktop(electron, { store, now = Date.now, timers = globalThis, up
       else { awayUntil = now() + 30_000; syncWindows(); }
     });
     win.on('session-end', () => safely(() => service.suspend()));
-    win.loadFile(html, { query: { role } }).catch((error) => report(error));
+    // Cancelling a cold window before it finishes loading is not an application failure.
+    win.loadFile(html, { query: { role } }).catch((error) => { if (alive(win) && !quitting) report(error); });
     return win;
   }
   function destroy(win) { if (alive(win)) win.destroy(); }
@@ -83,6 +87,7 @@ function startDesktop(electron, { store, now = Date.now, timers = globalThis, up
     }
   }
   function broadcast() {
+    if (quitting) return;
     syncWindows();
     const s = state();
     for (const win of windows.keys()) if (ready.has(win)) win.webContents.send('activity:state', s);
@@ -103,14 +108,16 @@ function startDesktop(electron, { store, now = Date.now, timers = globalThis, up
     }
   }
   function report(error) {
-    failure = error.message || String(error);
-    console.error(error);
-    // Stop scheduling after a persistence failure rather than silently lose recorded time.
+    if (failure) return;
+    failure = error.message || String(error); console.error(error);
+    // A fatal failure must stay paused even if another resume callback arrives.
     service.suspended = true;
-    notify('番茄钟已暂停', failure);
-    broadcast();
+    notify('番茄钟已暂停，请检查错误后重启', failure); broadcast();
   }
-  function safely(fn) { try { fn(); broadcast(); } catch (error) { report(error); } }
+  function safely(fn) {
+    if (failure) { broadcast(); return; }
+    try { fn(); broadcast(); } catch (error) { report(error); }
+  }
   function applyPreferences() {
     nativeTheme.themeSource = service.preferences.theme;
     if (process.platform === 'win32' || process.platform === 'darwin') app.setLoginItemSettings({
@@ -157,7 +164,10 @@ function startDesktop(electron, { store, now = Date.now, timers = globalThis, up
         default: throw new Error('Unknown operation');
       }
       broadcast(); return { ok: true, value };
-    } catch (error) { return { ok: false, error: error.message || String(error) }; }
+    } catch (error) {
+      if (typeof error.code === 'string' && /^E[A-Z]+$/.test(error.code)) report(error);
+      return { ok: false, error: error.message || String(error) };
+    }
   });
   service.on('break-due', () => notify('该休息了', '工作仍在继续记录。可以开始休息，或一小时后再提醒。'));
   service.on('break-over', () => notify('休息结束', '现在处于等待状态。准备好后手动开始工作。'));

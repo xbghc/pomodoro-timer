@@ -3,7 +3,7 @@ const { EventEmitter } = require('node:events');
 const { ActivityTimer } = require('./activity-core');
 const { dateKey, dayBounds, planForDate, planWindows, windowAt } = require('./schedule-v2');
 
-// Electron-free orchestration: all entry points share the same schedule and recording rules.
+// Electron-free orchestration: every entry point shares schedule and recording rules.
 class ActivityService extends EventEmitter {
   constructor({ store, now = Date.now }) {
     super();
@@ -11,18 +11,23 @@ class ActivityService extends EventEmitter {
     this.now = now;
     this.schedule = store.schedule();
     this.preferences = store.preferences();
-    store.records(); // Fail loudly on corrupt history; never replace it with an empty array.
+    store.records(); // Corrupt data is an error, never an empty history.
     store.recover();
+    this.notBefore = store.records().reduce((latest, record) => Math.max(latest, record.endedAt), 0);
     this.timer = new ActivityTimer({ now, workMin: this.preferences.reminderMin, breakMin: this.preferences.breakMin });
     this.previousWindow = undefined;
     this.suspended = false;
     this.lastCheckpoint = -Infinity;
     this.revision = 0;
-    this.timer.on('record', (record) => { store.create(record); this.revision++; });
+    this.timer.on('record', (record) => {
+      store.create(record);
+      this.notBefore = Math.max(this.notBefore, record.endedAt);
+      this.revision++;
+    });
     for (const event of ['break-due', 'break-over', 'boundary']) this.timer.on(event, () => this.emit(event));
   }
   currentWindow() { return windowAt(this.schedule, new Date(this.now()), this.preferences.dayTemplates); }
-  boundary() { return this.currentWindow()?.endAt ?? dayBounds(dateKey(new Date(this.now()))).endAt; }
+  boundary() { return this.currentWindow()?.endAt ?? null; }
   _checkpoint(force = false) {
     if (force || this.now() - this.lastCheckpoint >= 5000 || this.now() < this.lastCheckpoint) {
       this.store.checkpoint(this.timer.getState(), this.timer.lastObservedAt);
@@ -30,8 +35,9 @@ class ActivityService extends EventEmitter {
     }
   }
   _reconcile(reconfigured = false) {
+    // Wall-clock rollback must not create overlapping automatic records.
+    if (this.now() < this.notBefore) { this.previousWindow = undefined; return; }
     const current = this.currentWindow(), previous = this.previousWindow;
-    // Trigger on entering a block, not on being idle inside one. Break completion stays waiting.
     const entering = current && (previous === undefined || previous === null ||
       (!reconfigured && current.startAt !== previous.startAt));
     if (entering) {
@@ -47,7 +53,6 @@ class ActivityService extends EventEmitter {
   tick() {
     if (this.suspended) return this.state();
     const result = this.timer.tick();
-    // Resume from a missed power event at *now*, never extrapolate the gap.
     if (result === 'suspended') this.previousWindow = undefined;
     this._reconcile();
     this._checkpoint(result !== null);
@@ -58,11 +63,13 @@ class ActivityService extends EventEmitter {
       window: this.currentWindow(), preferences: this.preferences,
       templateNames: Object.keys(this.schedule.templates),
       todayTemplate: planForDate(this.schedule, dateKey(new Date(this.now())), this.preferences.dayTemplates).name,
-      revision: this.revision, suspended: this.suspended };
+      revision: this.revision, suspended: this.suspended,
+      clockBlockedUntil: this.notBefore > this.now() ? this.notBefore : null };
   }
   command(name, value) {
     if (this.suspended) throw new Error('Timer is suspended');
     this.tick();
+    if (this.now() < this.notBefore) throw new Error('System clock moved backwards; recording is paused until the last recorded time');
     let result;
     switch (name) {
       case 'startWork': result = this.timer.startWork({ remindInMin: value ?? this.preferences.reminderMin, boundaryAt: this.boundary() }); break;
@@ -72,40 +79,32 @@ class ActivityService extends EventEmitter {
       case 'stop': result = this.timer.stop(); break;
       default: throw new Error('Unknown command');
     }
-    if (!result && !['stop'].includes(name)) throw new Error('Command is not valid in the current state or duration is invalid');
+    if (!result && name !== 'stop') throw new Error('Command is not valid in the current state or duration is invalid');
     this._checkpoint(true);
     return this.state();
   }
   suspend() {
     if (this.suspended) return;
-    this.timer.suspend();
-    this.suspended = true;
-    this._checkpoint(true);
+    this.timer.suspend(); this.suspended = true; this._checkpoint(true);
   }
   resume() {
     if (!this.suspended) return this.tick();
-    this.suspended = false;
-    this.previousWindow = undefined;
+    this.suspended = false; this.previousWindow = undefined;
     this.timer.lastObservedAt = this.now();
     return this.tick();
   }
   close() { this.suspend(); }
   reloadSchedule() {
-    const next = this.store.schedule(); // Validate before replacing a known-good configuration.
-    this.tick();
-    this.schedule = next;
-    this._reconcile(true);
-    this.revision++;
-    this._checkpoint(true);
+    const next = this.store.schedule(); // Validate before replacing the last known-good schedule.
+    this.tick(); this.schedule = next; this._reconcile(true);
+    this.revision++; this._checkpoint(true);
     return this.state();
   }
   selectTodayTemplate(name) {
     if (typeof name !== 'string' || !Object.hasOwn(this.schedule.templates, name)) throw new Error('Unknown template');
     this.tick();
     this.preferences = this.store.savePreferences({ dayTemplates: { [dateKey(new Date(this.now()))]: name } });
-    this._reconcile(true);
-    this.revision++;
-    this._checkpoint(true);
+    this._reconcile(true); this.revision++; this._checkpoint(true);
     return this.state();
   }
   savePreferences(patch) {
@@ -115,7 +114,6 @@ class ActivityService extends EventEmitter {
     this.preferences = this.store.savePreferences(patch);
     this.timer.defaults.workMin = this.preferences.reminderMin;
     this.timer.defaults.breakMin = this.preferences.breakMin;
-    // Changing defaults does not reset the current reminder or split the record.
     return this.state();
   }
   day(key) {
@@ -137,13 +135,11 @@ class ActivityService extends EventEmitter {
     if (active.startedAt !== null && record.endedAt > active.startedAt) throw new Error('Record overlaps the ongoing activity; stop it before editing');
     if (records.some((r) => r.id !== existing?.id && record.startedAt < r.endedAt && record.endedAt > r.startedAt)) throw new Error('Activity records cannot overlap');
     const result = existing ? this.store.update(existing.id, record) : this.store.create(record);
-    this.revision++;
-    return result;
+    this.revision++; return result;
   }
   deleteRecord(id) {
     if (typeof id !== 'string' || !this.store.delete(id)) throw new Error('Record not found');
-    this.revision++;
-    return true;
+    this.revision++; return true;
   }
 }
 module.exports = { ActivityService };
