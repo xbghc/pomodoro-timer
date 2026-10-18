@@ -1,0 +1,74 @@
+name: Flutter native shell
+on:
+  pull_request:
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-native.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flutter-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  hover-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test native hover policy
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror flutter/native/test/hover_policy_test.cpp -o /tmp/hover-test
+          /tmp/hover-test
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the verified Flutter stable revision
+        run: |
+          sdk="$RUNNER_TEMP/flutter-sdk"
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$sdk"
+          git -C "$sdk" fetch --depth 1 origin abaf9c523780a608bd46686fd5e53740a07077f8
+          git -C "$sdk" checkout --detach abaf9c523780a608bd46686fd5e53740a07077f8
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cygpath -w "$sdk/bin" >> "$GITHUB_PATH"
+          else
+            echo "$sdk/bin" >> "$GITHUB_PATH"
+          fi
+          "$sdk/bin/flutter" --version
+      - name: Generate isolated native runners
+        run: |
+          dart tool/bootstrap.dart
+          flutter pub get
+      - name: Analyze and test Flutter
+        run: |
+          flutter analyze
+          flutter test
+      - name: Test AppKit hover policy
+        if: runner.os == 'macOS'
+        run: |
+          swiftc native/macos/HoverPolicy.swift native/test/hover_policy_test.swift -o "$RUNNER_TEMP/hover-test"
+          "$RUNNER_TEMP/hover-test"
+      - name: Compile native application (not a fullscreen acceptance test)
+        run: flutter build ${{ matrix.target }} --debug
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: flutter-shell-probe-${{ matrix.target }}
+          path: |
+            flutter/build/windows/x64/runner/Debug/
+            flutter/build/macos/Build/Products/Debug/*.app
+          if-no-files-found: error
+          retention-days: 7
