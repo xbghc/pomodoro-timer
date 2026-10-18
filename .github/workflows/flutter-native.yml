@@ -1,0 +1,49 @@
+name: Flutter native drawer
+on:
+  pull_request:
+    paths:
+      - 'flutter/**'
+      - '.github/workflows/flutter-native.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: flutter-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - run: python tool/prepare.py
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build ${{ matrix.platform }} --debug
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: flutter-drawer-prototype-${{ matrix.platform }}
+          path: |
+            flutter/build/windows/x64/runner/Debug/**
+            flutter/build/macos/Build/Products/Debug/*.app/**
+          retention-days: 14
+          if-no-files-found: error

@@ -1,0 +1,8 @@
+.dart_tool/
+build/
+.flutter-plugins-dependencies
+pubspec.lock
+# Disposable SDK-generated hosts. Custom native code lives in native/.
+windows/
+macos/
+.metadata
