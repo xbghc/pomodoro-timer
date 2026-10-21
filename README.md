@@ -6,7 +6,7 @@
 
 ## 运行与构建
 
-需要 **macOS 13+、Xcode 16+ / Swift 6.0+**。没有第三方包依赖。
+应用最低运行系统为 **macOS 13.0**。源码最低工具链为 **Swift 6.0 / Xcode 16.0**，采用 Swift 6 严格并发语言模式；Xcode 16.0 开发机要求 **macOS 14.5+**，与应用运行下限不同。没有第三方包依赖。
 
 ```bash
 swift test                       # 领域、持久化、确定性时钟和布局测试
@@ -80,4 +80,13 @@ scripts/verify.sh          # 按平台区分验证
 docs/                      # 设计、真实验证结果、macOS 人工验收
 ```
 
-本次未修改仓库共享的 `.github/workflows/`、`.npmrc`、远端设置或云环境。现有 Windows/Storybook 工作流仍属于旧产品，不能构建本次 Swift 重写；替换共享 CI 需后续单独处理，当前不要触发旧发布流程。本次没有推送、合并、发布。
+## 持续验证
+
+[Swift 工作流](.github/workflows/build.yml) 已替换旧 Windows/Electron 构建，旧 Storybook/Pages 部署和 Electron 镜像配置已删除。它包含：
+
+- Linux + Swift 6.0.3：核心测试与原生源码语法检查。
+- Intel macOS + Xcode 16.0：最低工具链下的测试、真实 SwiftUI/AppKit 编译与链接。
+- Apple Silicon macOS + Xcode 16.4：测试、真实编译与链接。
+- 两条 Mac 路径均构建 release `.app`，使用本地 ad-hoc 签名，检查签名、架构和 macOS 13.0 最低部署目标。
+
+工作流仅有 `contents: read` 权限，没有 Release、Pages、产物上传、公证或签名秘密，也不使用大型/自托管付费 runner。它可由 PR、main 分支提交或手动触发。本次只修改本地文件，**没有推送或运行远端工作流**，也没有改动平台保存的云环境配置。原生构建结果仍待 macOS 执行后确认；[静态审查记录](docs/static-review.md) 不替代编译或实机验收。

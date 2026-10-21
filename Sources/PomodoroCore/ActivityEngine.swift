@@ -24,6 +24,11 @@ public struct ActivityEngine {
     public var active: ActiveActivity? { snapshot.runtime.active }
     public var isWaiting: Bool { active == nil }
     public var isReminderDue: Bool { active?.kind == .work && snapshot.runtime.reminderDelivered }
+    public var restDeadline: Date? {
+        guard let end = snapshot.runtime.restDeadline, let observed = snapshot.runtime.lastObservedAt else { return nil }
+        let takeover = resolver.nextBlock(after: observed, configuration: configuration, selection: snapshot.selection)?.start
+        return min(end, takeover ?? end)
+    }
 
     /// Startup / wake never replay elapsed blocks. A crash closes only the last saved observation.
     @discardableResult public mutating func activate(at now: Date) throws -> [TimerEvent] {
@@ -109,7 +114,7 @@ public struct ActivityEngine {
         guard active?.kind != .work else { return events }
         close(at: now)
         begin(.work, at: now, minutes: duration, fixedEnd: currentBlock(at: now)?.end)
-        return events
+        return relevantEvents(events)
     }
 
     @discardableResult public mutating func startRest(at now: Date, minutes: Int? = nil) throws -> [TimerEvent] {
@@ -120,7 +125,7 @@ public struct ActivityEngine {
         guard active?.kind != .rest else { throw ValidationError("已经在休息。") }
         close(at: now)
         begin(.rest, at: now, minutes: duration, fixedEnd: currentBlock(at: now)?.end)
-        return events
+        return relevantEvents(events)
     }
 
     @discardableResult public mutating func deferReminder(at now: Date, minutes: Int = 60) throws -> [TimerEvent] {
@@ -137,7 +142,7 @@ public struct ActivityEngine {
         let events = try tick(at: now)
         try requireAvailable()
         close(at: now)
-        return events
+        return relevantEvents(events)
     }
 
     /// Sleep and normal exit both close actual activity; no offline interval is counted.
@@ -145,7 +150,7 @@ public struct ActivityEngine {
         let events = try tick(at: now)
         if snapshot.runtime.clockBlockedUntil == nil { close(at: now) }
         snapshot.runtime.suspended = true
-        return events
+        return relevantEvents(events)
     }
 
     @discardableResult public mutating func selectTemplate(_ name: String?, at now: Date) throws -> [TimerEvent] {
@@ -155,7 +160,7 @@ public struct ActivityEngine {
         let before = currentBlock(at: now)
         snapshot.selection = name.map { DayTemplateSelection(day: resolver.dayKey(now), templateID: $0) }
         events += reconcileSchedule(previous: before, at: now)
-        return events
+        return relevantEvents(events)
     }
 
     @discardableResult public mutating func replaceConfiguration(_ configuration: ScheduleConfiguration,
@@ -169,23 +174,25 @@ public struct ActivityEngine {
             snapshot.selection = nil
         }
         events += reconcileSchedule(previous: before, at: now)
-        return events
+        return relevantEvents(events)
     }
 
-    public mutating func upsertRecord(_ record: ActivityRecord, at now: Date) throws {
-        _ = try tick(at: now)
+    @discardableResult public mutating func upsertRecord(_ record: ActivityRecord, at now: Date) throws -> [TimerEvent] {
+        let events = try tick(at: now)
         try requireAvailable()
         var records = snapshot.records.filter { $0.id != record.id }
         records.append(record)
         try RecordValidation.validate(records, now: now, active: active)
         snapshot.records = records.sorted { $0.start < $1.start }
+        return events
     }
 
-    public mutating func deleteRecord(id: UUID, at now: Date) throws {
-        _ = try tick(at: now)
+    @discardableResult public mutating func deleteRecord(id: UUID, at now: Date) throws -> [TimerEvent] {
+        let events = try tick(at: now)
         try requireAvailable()
         guard snapshot.records.contains(where: { $0.id == id }) else { throw ValidationError("记录不存在。") }
         snapshot.records.removeAll { $0.id == id }
+        return events
     }
 
     public func currentBlock(at now: Date) -> PlannedBlock? {
@@ -249,11 +256,22 @@ public struct ActivityEngine {
         guard snapshot.runtime.clockBlockedUntil == nil else { throw ValidationError("系统时间早于已记录时间，已安全暂停。请校正系统时间。") }
     }
     private func validateTime(_ date: Date) throws {
-        guard date.timeIntervalSince1970.isFinite else { throw ValidationError("时钟返回了无效时间。") }
+        guard SupportedDate.contains(date) else { throw ValidationError("时钟返回了无效或超出支持日历范围的时间。") }
     }
     private func validateDuration(_ minutes: Int, maximum: Int) throws {
         guard (1...maximum).contains(minutes) else { throw ValidationError("时长必须是 1–\(maximum) 分钟。") }
     }
     private func earliest(_ date: Date, _ others: Date?...) -> Date { ([date] + others.compactMap { $0 }).min()! }
     private func earliestOptional(_ dates: Date?...) -> Date? { dates.compactMap { $0 }.min() }
+
+    private func relevantEvents(_ events: [TimerEvent]) -> [TimerEvent] {
+        events.filter { event in
+            switch event {
+            case .workReminder: return isReminderDue
+            case .restFinished: return isWaiting
+            case .scheduledWorkStarted: return active?.kind == .work
+            case .scheduledBlockEnded, .clockMovedBackward: return true
+            }
+        }
+    }
 }

@@ -66,6 +66,64 @@ final class ActivityEngineTests: XCTestCase {
         XCTAssertEqual(engine.snapshot.records[0].end, time("10:12"))
     }
 
+    func testStartingRestOrStoppingAtReminderTimeDoesNotDeliverStaleReminder() throws {
+        var resting = try running()
+        XCTAssertEqual(try resting.startRest(at: time("10:30")), [])
+        XCTAssertEqual(resting.active?.kind, .rest)
+        var stopped = try running()
+        XCTAssertEqual(try stopped.stop(at: time("10:30")), [])
+        XCTAssertTrue(stopped.isWaiting)
+        var switched = try running()
+        XCTAssertEqual(try switched.selectTemplate("无固定时段", at: time("10:30")), [.scheduledBlockEnded])
+        var suspended = try running()
+        XCTAssertEqual(try suspended.suspend(at: time("10:30")), [])
+    }
+
+    func testRestCountdownUsesEarlierFixedDeadline() throws {
+        var engine = try running(at: time("12:00"))
+        try engine.startRest(at: time("12:08"), minutes: 5)
+        XCTAssertEqual(engine.snapshot.runtime.restEndsAt, time("12:13"))
+        XCTAssertEqual(engine.snapshot.runtime.restDeadline, time("12:10"))
+        try engine.tick(at: time("12:10"))
+        XCTAssertNil(engine.snapshot.runtime.restDeadline)
+    }
+
+    func testRestCountdownIncludesUpcomingFixedStartTakeover() throws {
+        var engine = try running(at: time("09:55"))
+        try engine.startRest(at: time("09:55"), minutes: 15)
+        XCTAssertEqual(engine.snapshot.runtime.restEndsAt, time("10:10"))
+        XCTAssertEqual(engine.restDeadline, time("10:00"))
+        try engine.tick(at: time("10:00"))
+        XCTAssertEqual(engine.active?.kind, .work)
+        XCTAssertNil(engine.restDeadline)
+    }
+
+    func testCrashDuringRestDoesNotFillRestUntilItsDeadline() throws {
+        var engine = try running()
+        try engine.startRest(at: time("10:10"))
+        try engine.tick(at: time("10:12"))
+        var restarted = try ActivityEngine(configuration: .example, snapshot: engine.snapshot, calendar: utc)
+        try restarted.activate(at: time("11:00"))
+        XCTAssertEqual(restarted.snapshot.records.map(\.duration), [600, 120])
+        XCTAssertEqual(restarted.snapshot.records.last?.end, time("10:12"))
+        XCTAssertEqual(restarted.active?.start, time("11:00"))
+    }
+
+    func testTodayOverrideUsesLocalMidnightRatherThanUTC() throws {
+        var calendar = utc
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        var engine = try ActivityEngine(configuration: .example, calendar: calendar)
+        try engine.activate(at: time("15:50"))
+        try engine.selectTemplate("无固定时段", at: time("15:51"))
+        XCTAssertEqual(engine.snapshot.selection?.day, "2026-10-21")
+        try engine.tick(at: time("16:00"))
+        XCTAssertNil(engine.snapshot.selection)
+        XCTAssertTrue(engine.isWaiting)
+        try engine.tick(at: time("02:00", day: "2026-10-22"))
+        XCTAssertEqual(engine.active?.start, time("02:00", day: "2026-10-22"))
+        XCTAssertEqual(engine.snapshot.runtime.fixedEnd, time("04:10", day: "2026-10-22"))
+    }
+
     func testFixedStopWinsOverExtensionAndSimultaneousReminder() throws {
         for (start, end) in [("11:40", "12:10"), ("17:40", "18:10"), ("22:00", "22:30")] {
             var engine = try running(at: time(start))

@@ -13,7 +13,7 @@ if [[ "$configuration" != "release" && "$configuration" != "debug" ]]; then
   exit 1
 fi
 
-swift build --package-path "$project_dir" --configuration "$configuration" --product PomodoroTimer
+swift build --package-path "$project_dir" --configuration "$configuration" --product PomodoroTimer -Xswiftc -warnings-as-errors
 binary_dir="$(swift build --package-path "$project_dir" --configuration "$configuration" --show-bin-path)"
 app_dir="$project_dir/dist/PomodoroTimer.app"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"

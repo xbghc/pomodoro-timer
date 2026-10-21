@@ -13,10 +13,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var reminderMessage: String?
 
     let directory: URL
-    var openCalendar: (() -> Void)?
-    var enterFullScreenRest: (() -> Void)?
-    var onReminder: ((String) -> Void)?
-    var onChange: (() -> Void)?
+    var openCalendar: (@MainActor () -> Void)?
+    var enterFullScreenRest: (@MainActor () -> Void)?
+    var onReminder: (@MainActor (String) -> Void)?
+    var onChange: (@MainActor () -> Void)?
     private var session: ActivitySession?
     private var timer: Timer?
 
@@ -45,7 +45,7 @@ final class AppModel: ObservableObject {
         isBlocked ? (snapshot.runtime.lastObservedAt ?? now) : now
     }
     var elapsed: TimeInterval { active.map { max(0, observedNow.timeIntervalSince($0.start)) } ?? 0 }
-    var restRemaining: TimeInterval { max(0, (snapshot.runtime.restEndsAt ?? now).timeIntervalSince(now)) }
+    var restRemaining: TimeInterval { max(0, (session?.engine.restDeadline ?? observedNow).timeIntervalSince(observedNow)) }
     var selectedTemplate: String {
         ScheduleResolver().templateID(on: now, configuration: configuration, selection: snapshot.selection)
     }
@@ -105,17 +105,17 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult func save(_ record: ActivityRecord) -> Bool {
-        action { engine, now in try engine.upsertRecord(record, at: now); return [] }
+        action { try $0.upsertRecord(record, at: $1) }
     }
     @discardableResult func delete(_ record: ActivityRecord) -> Bool {
-        action { engine, now in try engine.deleteRecord(id: record.id, at: now); return [] }
+        action { try $0.deleteRecord(id: record.id, at: $1) }
     }
     func reloadConfiguration() {
         guard let session else { load(); return }
         do {
-            handle(try session.reloadConfiguration())
+            let events = try session.reloadConfiguration()
             errorMessage = nil
-            refresh()
+            refresh(events: events)
         } catch { report(error) }
     }
     func openJSON() {
@@ -136,7 +136,7 @@ final class AppModel: ObservableObject {
     private func tick() {
         now = Date()
         guard let session, blockingError == nil else { return }
-        do { handle(try session.tick()); refresh() }
+        do { refresh(events: try session.tick()) }
         catch { report(error) }
     }
 
@@ -146,17 +146,17 @@ final class AppModel: ObservableObject {
             let events = try session.perform(operation)
             reminderMessage = nil
             errorMessage = nil
-            handle(events)
-            refresh()
+            refresh(events: events)
             return true
         } catch { report(error); return false }
     }
 
-    private func refresh() {
+    private func refresh(events: [TimerEvent] = []) {
         guard let session else { return }
         snapshot = session.engine.snapshot
         configuration = session.engine.configuration
         now = Date()
+        handle(events)
         onChange?()
     }
     private func report(_ error: Error) {

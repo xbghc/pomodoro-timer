@@ -11,8 +11,8 @@ private final class DrawerPanel: NSPanel {
 
 @MainActor
 private final class HoverHostingView<Content: View>: NSHostingView<Content> {
-    var entered: (() -> Void)?
-    var exited: (() -> Void)?
+    var entered: (@MainActor () -> Void)?
+    var exited: (@MainActor () -> Void)?
     private var hoverArea: NSTrackingArea?
 
     override var intrinsicContentSize: NSSize {
@@ -22,7 +22,7 @@ private final class HoverHostingView<Content: View>: NSHostingView<Content> {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hoverArea { removeTrackingArea(hoverArea) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area)
         hoverArea = area
     }
@@ -41,7 +41,7 @@ final class DrawerController {
     private let panel: DrawerPanel
     private let model: AppModel
     private let presentation = DrawerPresentation()
-    private var collapseTask: DispatchWorkItem?
+    private var collapseTask: Task<Void, Never>?
 
     init(model: AppModel) {
         self.model = model
@@ -71,6 +71,7 @@ final class DrawerController {
         guard let frame = targetFrame(expanded: presentation.expanded) else { panel.orderOut(nil); return }
         panel.setFrame(frame, display: true)
         panel.orderFrontRegardless()
+        if presentation.expanded { scheduleCollapse(after: 0.3) }
     }
 
     func announce(_ text: String) {
@@ -88,6 +89,7 @@ final class DrawerController {
     private func setExpanded(_ expanded: Bool) {
         collapseTask?.cancel()
         guard let frame = targetFrame(expanded: expanded) else { return }
+        guard presentation.expanded != expanded || panel.frame != frame else { return }
         presentation.expanded = expanded
         if !expanded { presentation.announcement = nil }
         panel.hasShadow = expanded
@@ -97,12 +99,12 @@ final class DrawerController {
     }
     private func scheduleCollapse(after delay: TimeInterval) {
         collapseTask?.cancel()
-        let task = DispatchWorkItem { [weak self] in
-            guard let self, !self.panel.frame.contains(NSEvent.mouseLocation) else { return }
+        collapseTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+            catch { return }
+            guard !Task.isCancelled, let self, !self.panel.frame.contains(NSEvent.mouseLocation) else { return }
             self.setExpanded(false)
         }
-        collapseTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
     }
     private func targetFrame(expanded: Bool) -> CGRect? {
         let screens = NSScreen.screens.enumerated().map { index, screen in

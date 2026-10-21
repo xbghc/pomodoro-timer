@@ -145,10 +145,16 @@ public struct ScheduleResolver {
         return (configuration.templates[name] ?? []).enumerated().compactMap { index, block in
             guard let startMinute = WorkBlock.minutes(block.start), let endMinute = WorkBlock.minutes(block.end) else { return nil }
             func localTime(_ minute: Int) -> Date? {
-                // DST: nonexistent times advance to the first valid time; repeated times use the first occurrence.
-                calendar.nextDate(after: day.addingTimeInterval(-1),
-                                  matching: DateComponents(hour: minute / 60, minute: minute % 60, second: 0),
-                                  matchingPolicy: .nextTime, repeatedTimePolicy: .first)
+                // Resolve missing local minutes explicitly. Foundation's .nextTime can skip
+                // the entire day for a non-hour DST gap (e.g. Lord Howe's 02:00–02:30).
+                // Exact matches and repeated times take the first occurrence on this day.
+                for candidate in minute..<1440 {
+                    if let result = calendar.nextDate(after: day.addingTimeInterval(-1),
+                                                      matching: DateComponents(hour: candidate / 60, minute: candidate % 60, second: 0),
+                                                      matchingPolicy: .strict, repeatedTimePolicy: .first),
+                       calendar.isDate(result, inSameDayAs: date) { return result }
+                }
+                return nil
             }
             guard let start = localTime(startMinute), let end = localTime(endMinute),
                   calendar.isDate(start, inSameDayAs: date), calendar.isDate(end, inSameDayAs: date), start < end else { return nil }

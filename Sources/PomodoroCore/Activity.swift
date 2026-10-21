@@ -7,6 +7,12 @@ public enum ActivityKind: String, Codable, CaseIterable, Hashable, Sendable {
 
 public enum RecordOrigin: String, Codable, Sendable { case timer, manual }
 
+enum SupportedDate {
+    static func contains(_ date: Date) -> Bool {
+        date.timeIntervalSince1970.isFinite && date >= .distantPast && date <= .distantFuture
+    }
+}
+
 public struct ActivityRecord: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public var kind: ActivityKind
@@ -39,6 +45,11 @@ public struct RuntimeState: Codable, Equatable, Sendable {
     public var suspended = false
     public var clockBlockedUntil: Date?
     public init() {}
+
+    public var restDeadline: Date? {
+        guard active?.kind == .rest, let restEndsAt else { return nil }
+        return min(restEndsAt, fixedEnd ?? restEndsAt)
+    }
 }
 
 public struct ActivitySnapshot: Codable, Equatable, Sendable {
@@ -54,11 +65,11 @@ public struct ActivitySnapshot: Codable, Equatable, Sendable {
         let runtime = runtime
         let dates = [runtime.reminderAt, runtime.restEndsAt, runtime.fixedEnd,
                      runtime.lastObservedAt, runtime.clockBlockedUntil].compactMap { $0 }
-        guard dates.allSatisfy({ $0.timeIntervalSince1970.isFinite }) else {
+        guard dates.allSatisfy(SupportedDate.contains) else {
             throw ValidationError("运行检查点包含无效时间。")
         }
         if let active = runtime.active {
-            guard active.start.timeIntervalSince1970.isFinite,
+            guard SupportedDate.contains(active.start),
                   let observed = runtime.lastObservedAt, observed >= active.start,
                   !records.contains(where: { $0.id == active.id || $0.end > active.start }),
                   !runtime.suspended, runtime.clockBlockedUntil == nil else {
@@ -66,10 +77,17 @@ public struct ActivitySnapshot: Codable, Equatable, Sendable {
             }
             guard (active.kind == .work && runtime.reminderAt != nil && runtime.restEndsAt == nil) ||
                   (active.kind == .rest && runtime.restEndsAt != nil && runtime.reminderAt == nil),
-                  runtime.fixedEnd.map({ $0 > active.start }) ?? true,
-                  runtime.restEndsAt.map({ $0 > active.start }) ?? true,
+                  runtime.fixedEnd.map({ $0 > observed }) ?? true,
+                  runtime.restEndsAt.map({ $0 > observed }) ?? true,
                   runtime.reminderAt.map({ $0 >= active.start }) ?? true else {
                 throw ValidationError("活动检查点缺少正确的提醒或结束时间。")
+            }
+            if active.kind == .work, let reminder = runtime.reminderAt,
+               runtime.reminderDelivered != (reminder <= observed) {
+                throw ValidationError("工作提醒标记与检查点时间不一致。")
+            }
+            if active.kind == .rest, runtime.reminderDelivered {
+                throw ValidationError("休息检查点不能保留工作提醒标记。")
             }
         } else if runtime.reminderAt != nil || runtime.restEndsAt != nil || runtime.fixedEnd != nil || runtime.reminderDelivered {
             throw ValidationError("等待状态不能含有活动截止时间。")
@@ -83,7 +101,7 @@ public enum RecordValidation {
         var ids = Set<UUID>()
         var previousEnd: Date?
         for record in records.sorted(by: { $0.start < $1.start }) {
-            guard record.start.timeIntervalSince1970.isFinite, record.end.timeIntervalSince1970.isFinite,
+            guard SupportedDate.contains(record.start), SupportedDate.contains(record.end),
                   record.start < record.end else { throw ValidationError("记录的开始时间必须早于结束时间。") }
             guard ids.insert(record.id).inserted else { throw ValidationError("记录 ID 重复。") }
             if let now, record.end > now { throw ValidationError("只能记录已经发生的工作或休息，不能添加未来记录。") }

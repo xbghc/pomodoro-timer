@@ -20,7 +20,8 @@ struct HistoryView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Button { move(-1) } label: { Image(systemName: "chevron.left") }.help("前一天")
-                DatePicker("日期", selection: $day, displayedComponents: .date).labelsHidden().frame(width: 160)
+                DatePicker("日期", selection: $day, in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
+                    .labelsHidden().frame(width: 160)
                 Button { move(1) } label: { Image(systemName: "chevron.right") }.help("后一天")
                 Button("今天") { day = calendar.startOfDay(for: model.now) }
                 Spacer()
@@ -59,8 +60,9 @@ struct HistoryView: View {
     }
 
     private var timeline: some View {
-        let hours = Int(dayInterval.duration / 3600)
-        let height = CGFloat(hours) * 44
+        // Some DST transitions change the day by 30 minutes, not a whole hour.
+        let hours = Int(ceil(dayInterval.duration / 3600))
+        let height = CGFloat(dayInterval.duration / 3600) * 44
         return GeometryReader { geometry in
             let column = (geometry.size.width - 64) / 2
             ZStack(alignment: .topLeading) {
@@ -133,7 +135,10 @@ struct HistoryView: View {
             }
         }
     }
-    private func move(_ amount: Int) { day = calendar.date(byAdding: .day, value: amount, to: day)! }
+    private func move(_ amount: Int) {
+        if let next = calendar.date(byAdding: .day, value: amount, to: day),
+           (Date.distantPast...Date.distantFuture).contains(next) { day = next }
+    }
     private func addRecord() {
         let end = min(model.now, dayInterval.end, model.active?.start ?? model.now)
         guard end > dayInterval.start else {

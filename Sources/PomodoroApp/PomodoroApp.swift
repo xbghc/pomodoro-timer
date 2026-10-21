@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var rest: RestWindowController?
     private var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
+    private var observations: [(NotificationCenter, NSObjectProtocol)] = []
     private var lockDescriptor: Int32 = -1
     private let showWindowNotification = Notification.Name("com.ghm.pomodoro-timer.native.showWindow")
 
@@ -74,6 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        for (center, token) in observations { center.removeObserver(token) }
+        observations.removeAll()
+        DistributedNotificationCenter.default().removeObserver(self)
         drawer?.hide()
         rest?.hide()
         if lockDescriptor >= 0 { flock(lockDescriptor, LOCK_UN); Darwin.close(lockDescriptor) }
@@ -91,25 +95,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.center()
             mainWindow = window
         }
-        NSApp.activate(ignoringOtherApps: true) // Explicit user action; never used by hover or reminders.
+        // Activation is an explicit user action, never used by hover or reminders.
+        if #available(macOS 14, *) { NSApp.activate() }
+        else { NSApp.activate(ignoringOtherApps: true) }
         mainWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func observeSystem() {
         let workspace = NSWorkspace.shared.notificationCenter
-        workspace.addObserver(self, selector: #selector(willSleep), name: NSWorkspace.willSleepNotification, object: nil)
-        workspace.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
-        workspace.addObserver(self, selector: #selector(spaceChanged), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(timeZoneChanged), name: NSNotification.Name.NSSystemTimeZoneDidChange, object: nil)
-        DistributedNotificationCenter.default().addObserver(self, selector: #selector(showMain), name: showWindowNotification, object: nil)
+        observe(workspace, NSWorkspace.willSleepNotification) { $0.willSleep() }
+        observe(workspace, NSWorkspace.didWakeNotification) { $0.didWake() }
+        observe(workspace, NSWorkspace.activeSpaceDidChangeNotification) { $0.spaceChanged() }
+        observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.screensChanged() }
+        observe(.default, NSNotification.Name.NSSystemTimeZoneDidChange) { $0.timeZoneChanged() }
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(showMainFromNotification(_:)), name: showWindowNotification, object: nil)
     }
 
-    @objc private func willSleep() { model?.suspend(); rest?.hide() }
-    @objc private func didWake() { model?.wake(); drawer?.reposition() }
-    @objc private func spaceChanged() { drawer?.reposition() }
-    @objc private func screensChanged() { drawer?.reposition(); rest?.screensChanged() }
-    @objc private func timeZoneChanged() { model?.timeZoneChanged() }
+    private func observe(_ center: NotificationCenter, _ name: Notification.Name,
+                         action: @escaping @MainActor @Sendable (AppDelegate) -> Void) {
+        let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            // queue: .main guarantees this synchronous callback is on the main actor.
+            // In particular, close the sleep checkpoint before returning to NSWorkspace.
+            MainActor.assumeIsolated { if let self { action(self) } }
+        }
+        observations.append((center, token))
+    }
+
+    @objc nonisolated private func showMainFromNotification(_ notification: Notification) {
+        Task { @MainActor [weak self] in self?.showMain() }
+    }
+    private func willSleep() { model?.suspend(); rest?.hide() }
+    private func didWake() { model?.wake(); drawer?.reposition() }
+    private func spaceChanged() { drawer?.reposition() }
+    private func screensChanged() { drawer?.reposition(); rest?.screensChanged() }
+    private func timeZoneChanged() { model?.timeZoneChanged() }
     @objc private func startWork() { model?.startWork() }
     @objc private func startRest() { model?.startRest() }
     @objc private func deferReminder() { model?.deferReminder() }

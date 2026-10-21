@@ -19,6 +19,84 @@ final class HistoryAndPersistenceTests: XCTestCase {
         XCTAssertThrowsError(try engine.deleteRecord(id: automatic.id, at: time("11:00")))
     }
 
+    func testHistoryEditsAndDeletionDoNotConsumeCoincidentReminders() throws {
+        for deleting in [false, true] {
+            let clock = ManualClock(time("10:00"))
+            let store = MemoryStore()
+            let record = ActivityRecord(kind: .work, start: time("08:00"), end: time("09:00"))
+            store.snapshot.records = [record]
+            let session = try ActivitySession(store: store, calendar: utc, clock: { clock.now })
+            clock.now = time("10:30")
+            let events = try session.perform { engine, now in
+                if deleting { return try engine.deleteRecord(id: record.id, at: now) }
+                var edited = record
+                edited.kind = .rest
+                return try engine.upsertRecord(edited, at: now)
+            }
+            XCTAssertEqual(events, [.workReminder])
+            XCTAssertTrue(store.snapshot.runtime.reminderDelivered)
+            XCTAssertEqual(try session.tick(), [])
+        }
+    }
+
+    func testHistoryCommandReturnsRestCompletionEvent() throws {
+        var engine = try running()
+        try engine.startRest(at: time("10:05"))
+        let record = ActivityRecord(kind: .work, start: time("08:00"), end: time("09:00"))
+        XCTAssertEqual(try engine.upsertRecord(record, at: time("10:10")), [.restFinished])
+        XCTAssertTrue(engine.isWaiting)
+    }
+
+    func testRollbackBlocksConfigurationAndHistoryWritesThroughSession() throws {
+        let clock = ManualClock(time("10:00"))
+        let store = MemoryStore()
+        let session = try ActivitySession(store: store, calendar: utc, clock: { clock.now })
+        clock.now = time("10:10")
+        try session.tick()
+        clock.now = time("10:05")
+        XCTAssertEqual(try session.tick(), [.clockMovedBackward])
+        let saved = store.snapshot
+        let writes = store.saves
+        XCTAssertThrowsError(try session.reloadConfiguration())
+        XCTAssertThrowsError(try session.perform { try $0.selectTemplate("无固定时段", at: $1) })
+        let record = ActivityRecord(kind: .work, start: time("08:00"), end: time("09:00"))
+        XCTAssertThrowsError(try session.perform { try $0.upsertRecord(record, at: $1) })
+        XCTAssertEqual(store.snapshot, saved)
+        XCTAssertEqual(store.saves, writes)
+        clock.now = time("10:10")
+        try session.tick()
+        XCTAssertNil(session.engine.snapshot.runtime.clockBlockedUntil)
+    }
+
+    func testCorruptHugeOrNonFiniteDatesAreRejectedBeforeCalendarConversion() throws {
+        for date in [Date(timeIntervalSince1970: 1e100), Date(timeIntervalSince1970: .infinity), Date(timeIntervalSince1970: .nan)] {
+            var snapshot = ActivitySnapshot()
+            snapshot.runtime.lastObservedAt = date
+            XCTAssertThrowsError(try snapshot.validated())
+            var engine = try running()
+            XCTAssertThrowsError(try engine.activate(at: date))
+        }
+        let record = ActivityRecord(kind: .work, start: Date(timeIntervalSince1970: 1e20), end: Date(timeIntervalSince1970: 2e20))
+        XCTAssertThrowsError(try RecordValidation.validate([record]))
+    }
+
+    func testCorruptCheckpointCannotKeepExpiredActivityOrInconsistentReminder() throws {
+        var state = try running().snapshot
+        state.runtime.lastObservedAt = time("12:15")
+        XCTAssertThrowsError(try state.validated())
+        state = try running().snapshot
+        state.runtime.reminderDelivered = true
+        XCTAssertThrowsError(try state.validated())
+        state = try running().snapshot
+        state.runtime.lastObservedAt = time("10:40")
+        XCTAssertThrowsError(try state.validated())
+        var resting = try running()
+        try resting.startRest(at: time("10:01"))
+        state = resting.snapshot
+        state.runtime.reminderDelivered = true
+        XCTAssertThrowsError(try state.validated())
+    }
+
     func testHistoryRejectsFutureOverlapReversedAndActiveOverlap() throws {
         var engine = try running()
         for record in [ActivityRecord(kind: .work, start: time("09:00"), end: time("11:01")),
@@ -43,6 +121,20 @@ final class HistoryAndPersistenceTests: XCTestCase {
         try engine.stop(at: time("10:10"))
         let waiting = DailySummary(date: time("11:00"), records: engine.snapshot.records, active: engine.active, now: time("11:00"), calendar: utc)
         XCTAssertEqual(waiting.work, 600)
+    }
+
+    func testHalfHourDSTDayKeepsItsFullActualDuration() throws {
+        var calendar = utc
+        calendar.timeZone = TimeZone(identifier: "Australia/Lord_Howe")!
+        let date = instant("2026-10-04T12:00:00Z")
+        let day = try XCTUnwrap(calendar.dateInterval(of: .day, for: date))
+        XCTAssertEqual(day.duration, 23.5 * 3600)
+        let record = ActivityRecord(kind: .work, start: day.start, end: day.end)
+        let summary = DailySummary(date: date, records: [record], active: nil, now: day.end, calendar: calendar)
+        XCTAssertEqual(summary.work, 23.5 * 3600)
+        let config = ScheduleConfiguration(defaultTemplate: "dst", templates: ["dst": [WorkBlock(start: "02:10", end: "03:00")]])
+        let block = try XCTUnwrap(ScheduleResolver(calendar: calendar).blocks(on: date, configuration: config, selection: nil).first)
+        XCTAssertEqual(block.end.timeIntervalSince(block.start), 30 * 60)
     }
 
     func testCurrentActivityTotalsIncludeOnlyObservedTime() throws {

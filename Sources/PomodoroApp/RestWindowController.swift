@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PomodoroCore
 
 @MainActor
 private final class RestPanel: NSPanel {

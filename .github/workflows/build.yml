@@ -1,50 +1,67 @@
-name: Build Windows Installer
+name: Swift tests and macOS app
 
 on:
+  pull_request:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: swift-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: windows-latest
-    env:
-      # 覆盖仓库 .npmrc 里的国内镜像：GitHub runner 直连官方源更快
-      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
-      ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+  linux-core:
+    name: Swift 6.0.3 core tests (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: swift:6.0.3-noble
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          persist-credentials: false
+      - name: Test core and parse native sources (not a macOS build)
+        run: ./scripts/verify.sh -Xswiftc -warnings-as-errors
 
-      - name: 安装依赖
-        run: npm ci
-
-      - name: 单元测试
-        run: npm test
-
-      - name: 打包 NSIS 安装包
-        run: npx electron-builder --win nsis --publish never
-
-      - name: 上传构建产物（所有触发方式都可下载）
-        uses: actions/upload-artifact@v4
+  macos-app:
+    name: macOS app / ${{ matrix.runner }} / Xcode ${{ matrix.xcode }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            xcode: '16'
+          - runner: macos-15
+            xcode: '16.4'
+    env:
+      # Per-job selection only; no sudo xcode-select or saved environment changes.
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
         with:
-          name: PomodoroTimer-Setup
-          path: dist/PomodoroTimer-Setup-*.exe
-
-      - name: 发布 Release（仅 tag 触发）
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          # latest.yml + blockmap 是应用内自动更新（electron-updater）的元数据，缺一不可
-          files: |
-            dist/PomodoroTimer-Setup-*.exe
-            dist/PomodoroTimer-Setup-*.exe.blockmap
-            dist/latest.yml
-          generate_release_notes: true
+          persist-credentials: false
+      - name: Record toolchain and platform
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+          uname -m
+      - name: Test core and compile/link the real SwiftUI and AppKit app
+        run: ./scripts/verify.sh -Xswiftc -warnings-as-errors
+      - name: Build and verify local release bundle (ad-hoc signing only)
+        run: ./scripts/build-macos.sh release
+      - name: Verify binary architecture and bundle deployment target
+        run: |
+          test -x dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          file dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          lipo -archs dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          lipo -verify_arch "$(uname -m)" dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          xcrun vtool -show-build dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer | tee /tmp/pomodoro-build-version.txt
+          awk '$1 == "minos" { seen = 1; if ($2 != "13.0") exit 1 } END { if (!seen) exit 1 }' /tmp/pomodoro-build-version.txt
+          test "$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' dist/PomodoroTimer.app/Contents/Info.plist)" = '13.0'
+      # Deliberately no release, deployment, artifact upload, signing secret, or notarization step.
