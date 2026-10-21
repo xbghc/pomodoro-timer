@@ -1,0 +1,192 @@
+import AppKit
+import SwiftUI
+import PomodoroCore
+
+@MainActor
+final class AppModel: ObservableObject {
+    @Published private(set) var snapshot = ActivitySnapshot()
+    @Published private(set) var configuration = ScheduleConfiguration.example
+    @Published private(set) var now = Date()
+    @Published private(set) var isReady = false
+    @Published var errorMessage: String?
+    @Published private(set) var blockingError: String?
+    @Published private(set) var reminderMessage: String?
+
+    let directory: URL
+    var openCalendar: (() -> Void)?
+    var enterFullScreenRest: (() -> Void)?
+    var onReminder: ((String) -> Void)?
+    var onChange: (() -> Void)?
+    private var session: ActivitySession?
+    private var timer: Timer?
+
+    init(directory: URL? = nil) {
+        self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PomodoroTimerNative", isDirectory: true)
+        load()
+        timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        if let timer { RunLoop.main.add(timer, forMode: .common) }
+    }
+
+    var active: ActiveActivity? { snapshot.runtime.active }
+    var isBlocked: Bool { !isReady || blockingError != nil || snapshot.runtime.clockBlockedUntil != nil || snapshot.runtime.suspended }
+    var phaseTitle: String {
+        if isBlocked { return "已暂停" }
+        return active?.kind.title ?? "等待"
+    }
+    var tint: Color {
+        if isBlocked { return .orange }
+        return active?.kind == .rest ? .teal : (isReminderDue ? .orange : .accentColor)
+    }
+    var isReminderDue: Bool { active?.kind == .work && snapshot.runtime.reminderDelivered }
+    var observedNow: Date {
+        isBlocked ? (snapshot.runtime.lastObservedAt ?? now) : now
+    }
+    var elapsed: TimeInterval { active.map { max(0, observedNow.timeIntervalSince($0.start)) } ?? 0 }
+    var restRemaining: TimeInterval { max(0, (snapshot.runtime.restEndsAt ?? now).timeIntervalSince(now)) }
+    var selectedTemplate: String {
+        ScheduleResolver().templateID(on: now, configuration: configuration, selection: snapshot.selection)
+    }
+    var detail: String {
+        if let blockingError { return blockingError }
+        if let until = snapshot.runtime.clockBlockedUntil {
+            return "系统时间回退，暂停至 \(until.formatted(date: .abbreviated, time: .standard))。请校正系统时间。"
+        }
+        if isReminderDue { return "该休息了，手头的事可以从容收尾。" }
+        if active?.kind == .work, let reminder = snapshot.runtime.reminderAt {
+            if let end = snapshot.runtime.fixedEnd, end <= reminder { return "本时段于 \(Self.time(end)) 结束" }
+            return "\(Self.time(reminder)) 提醒休息"
+        }
+        if active?.kind == .rest { return "休息结束后，准备好再手动开始。" }
+        if let message = reminderMessage { return message }
+        if let next = ScheduleResolver().nextBlock(after: now, configuration: configuration, selection: snapshot.selection) {
+            return "下个工作时段 \(next.start.formatted(date: .abbreviated, time: .shortened))"
+        }
+        return "准备好时，开始一段工作。"
+    }
+
+    func load() {
+        do {
+            let store = try JSONActivityStore(directory: directory)
+            session = try ActivitySession(store: store)
+            isReady = true
+            blockingError = nil
+            errorMessage = nil
+            refresh()
+        } catch {
+            session = nil
+            isReady = false
+            blockingError = error.localizedDescription
+        }
+        onChange?()
+    }
+
+    func startWork(minutes: Int? = nil) {
+        action { try $0.startWork(at: $1, minutes: minutes) }
+    }
+    func startRest(minutes: Int? = nil, fullScreen: Bool = false) {
+        action { try $0.startRest(at: $1, minutes: minutes) }
+        if fullScreen, active?.kind == .rest, !isBlocked { enterFullScreenRest?() }
+    }
+    func deferReminder(minutes: Int = 60) { action { try $0.deferReminder(at: $1, minutes: minutes) } }
+    func stop() { action { try $0.stop(at: $1) } }
+    func selectTemplate(_ name: String?) { action { try $0.selectTemplate(name, at: $1) } }
+    func suspend() { action { try $0.suspend(at: $1) } }
+    func wake() { action { try $0.activate(at: $1) } }
+
+    func timeZoneChanged() {
+        action { engine, now in
+            _ = try engine.suspend(at: now)
+            engine.resolver.calendar = .current
+            return try engine.activate(at: now)
+        }
+    }
+
+    @discardableResult func save(_ record: ActivityRecord) -> Bool {
+        action { engine, now in try engine.upsertRecord(record, at: now); return [] }
+    }
+    @discardableResult func delete(_ record: ActivityRecord) -> Bool {
+        action { engine, now in try engine.deleteRecord(id: record.id, at: now); return [] }
+    }
+    func reloadConfiguration() {
+        guard let session else { load(); return }
+        do {
+            handle(try session.reloadConfiguration())
+            errorMessage = nil
+            refresh()
+        } catch { report(error) }
+    }
+    func openJSON() {
+        let url = directory.appendingPathComponent("schedule.json")
+        if !NSWorkspace.shared.open(url) { errorMessage = "无法打开 JSON 文件：\(url.path)" }
+    }
+    func showDataFolder() { NSWorkspace.shared.open(directory) }
+
+    func prepareToQuit() -> Bool {
+        guard session != nil else { return true }
+        return action { try $0.suspend(at: $1) }
+    }
+
+    func summary(for date: Date) -> DailySummary {
+        DailySummary(date: date, records: snapshot.records, active: active, now: observedNow, calendar: .current)
+    }
+
+    private func tick() {
+        now = Date()
+        guard let session, blockingError == nil else { return }
+        do { handle(try session.tick()); refresh() }
+        catch { report(error) }
+    }
+
+    @discardableResult private func action(_ operation: (inout ActivityEngine, Date) throws -> [TimerEvent]) -> Bool {
+        guard let session else { return false }
+        do {
+            let events = try session.perform(operation)
+            reminderMessage = nil
+            errorMessage = nil
+            handle(events)
+            refresh()
+            return true
+        } catch { report(error); return false }
+    }
+
+    private func refresh() {
+        guard let session else { return }
+        snapshot = session.engine.snapshot
+        configuration = session.engine.configuration
+        now = Date()
+        onChange?()
+    }
+    private func report(_ error: Error) {
+        if let failure = session?.persistenceFailure { blockingError = failure }
+        else { errorMessage = error.localizedDescription }
+        refresh()
+    }
+    private func handle(_ events: [TimerEvent]) {
+        for event in events {
+            let text: String
+            switch event {
+            case .workReminder: text = "该休息了，准备好时再开始休息。"
+            case .restFinished: text = "休息结束，准备好后手动开始工作。"
+            case .scheduledWorkStarted: text = "工作时段开始。"
+            case .scheduledBlockEnded: text = "本次工作时段结束。"
+            case .clockMovedBackward: text = "系统时间回退，记录已安全暂停。"
+            }
+            reminderMessage = text
+            onReminder?(text)
+        }
+    }
+
+    static func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }
+    static func duration(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        if total >= 3600 { return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60) }
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+    static func minutes(_ seconds: TimeInterval) -> String {
+        let minutes = max(0, Int(seconds / 60))
+        return minutes >= 60 ? "\(minutes / 60) 小时 \(minutes % 60) 分" : "\(minutes) 分钟"
+    }
+}

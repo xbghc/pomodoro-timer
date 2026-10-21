@@ -3,3 +3,6 @@ dist/
 smoke-shots/
 storybook-static/
 *.log
+.build/
+.swiftpm/
+.DS_Store
