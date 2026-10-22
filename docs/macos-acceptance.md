@@ -1,4 +1,4 @@
-# macOS 验收清单（尚未在本轮执行）
+# macOS 交互验收清单（尚未执行）
 
 应用最低运行系统为 macOS 13.0；源码最低为 Xcode 16.0 / Swift 6.0（Swift 6 语言模式），安装 Xcode 16.0 的开发机最低为 macOS 14.5。先在符合工具链要求的 Mac 运行：
 
@@ -8,7 +8,7 @@
 open dist/PomodoroTimer.app
 ```
 
-构建/打包脚本仅本地操作，不上传、不公证、不发布。原生部分在本轮 Linux 环境没有类型检查、链接或 UI 测试。以下全部需要真实 Mac。
+构建/打包脚本仅在执行机器生成应用，不上传、不公证、不发布。本地执行器仍为 Linux；远端 Mac CI 已实际执行原生类型检查、链接和打包，结果见 [验证记录](validation.md)。以下窗口、操作和系统行为仍需在可交互的真实 Mac 上逐项验收，CI 不提供这些结果或运行截图。
 
 ## 窗口与焦点
 
@@ -51,4 +51,4 @@ open dist/PomodoroTimer.app
 
 [工作流](../.github/workflows/build.yml) 在标准 `macos-15-intel` / Xcode 16.0 和 `macos-15` / Xcode 16.4 上运行测试、编译和链接，执行 `build-macos.sh release`，检查本地 ad-hoc 签名、Mach-O 架构和 `minos 13.0`。Linux 路径使用 Swift 6.0.3。旧 Windows 发布和 Storybook/Pages 部署已删除。
 
-无上传、发布、公证、秘密或付费服务设置；仅请求仓库读取权限。本轮没有推送或执行远端工作流，所以 Mac job 尚无实际结果。CI 通过后仍须完成上方窗口和系统行为的人工验收。
+无上传、发布、公证、秘密或付费服务设置；仅请求仓库读取权限。经用户授权，独立分支已推送并运行远端工作流，具体提交与检查结果见 [验证记录](validation.md)。CI 通过后仍须完成上方窗口和系统行为的人工验收。

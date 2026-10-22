@@ -1,5 +1,26 @@
 # 实际验证记录
 
+## 2026-10-22：获准推送与真实 macOS CI
+
+用户批准推送后，以普通 fast-forward 推送发布独立分支 `codex/macos-swiftui-rewrite`。首次远端 SHA 核实为 `181363ce4058f406bfeae18ed4a6f3f0e901ba85`，后续修复提交同样逐次核对远端 SHA；没有强制覆盖、合并 main、发布版本或修改平台保存的环境设置。
+
+已验证的代码与工作流提交为 [`4ccc2999343056543a0201be28fc5304c91ec6cf`](https://github.com/xbghc/pomodoro-timer/commit/4ccc2999343056543a0201be28fc5304c91ec6cf)。[CI 39724598328](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328) 已结束，整体结论 **success**：
+
+| 执行环境 | 实际结果 | 证据 |
+| --- | --- | --- |
+| Linux / Swift 6.0.3 | 58 项 XCTest 全通过；原生文件仅语法解析 | [Linux job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645525877) |
+| Intel Mac / Xcode 16.0 / Swift 6.0 | 58 项全通过；SwiftUI/AppKit debug 编译与链接、release `.app` 打包、Info.plist 与 ad-hoc 签名验证全部通过；Mach-O `x86_64`、`minos 13.0`，SDK 15.0 | [Intel job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645525994) |
+| Apple Silicon Mac / Xcode 16.4 / Swift 6.1.2 | 58 项全通过；同样完成原生编译、链接、release 打包、Info.plist 与 ad-hoc 签名验证；Mach-O `arm64`、`minos 13.0`，SDK 15.5 | [ARM job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645526009) |
+
+全部 Swift 目标采用 Swift 6 语言模式并启用 warnings-as-errors。原生 CI 实际使用 macOS 15.7.9；部署目标检查通过**不等于**已经在 macOS 13 启动应用。工作流没有运行 GUI、测试跨 Spaces/焦点/多屏交互或生成截图，也没有上传应用、使用签名秘密、公证或发布。
+
+CI 实际发现并修复的两个问题：
+
+1. [首次运行](https://github.com/xbghc/pomodoro-timer/actions/runs/39724119540)：Linux 通过；ARM 编译因缺少 CoreGraphics 的 Swift 几何接口失败，Intel 被后续运行取代并取消。提交 `b5cb8a9` 在布局文件及测试中条件导入 CoreGraphics，本地 Linux 58 项复测通过。
+2. [第二次运行](https://github.com/xbghc/pomodoro-timer/actions/runs/39724379941)：两个 Mac 的 58 项测试、原生编译、链接、打包和签名均成功，但 `lipo -verify_arch` 把末尾文件路径误当作架构。提交 `4ccc299` 调整参数顺序，并显式设置 Swift 工作流的运行标题；第三次运行完整通过。
+
+本地执行器始终为 Linux。CLI 构建已有上述真实 Mac 证据；窗口行为、系统睡眠/唤醒及单实例的交互集成、macOS 13 实机运行和 UI 截图仍未验收，见 [人工清单](macos-acceptance.md)。以下保留推送授权之前的本地验证历史，不能将其中“尚未执行 CI”理解为当前状态。
+
 ## 2026-10-22：移除全屏休息
 
 开始时位于 `codex/macos-swiftui-rewrite`，基线 `1049da7`，工作区干净；未发现额外 `AGENTS.md` 或仓库技能。本次仍为 Debian GNU/Linux 13 x86_64，没有 macOS SDK 或 `xcodebuild`。旧临时工具链已不在新环境中，重新从 Swift 官方下载同一 Swift 6.0.3 至 `/tmp/pomodoro-swift-toolchain`，没有修改平台环境设置。
