@@ -31,7 +31,7 @@ func describe(_ element: AXUIElement, depth: Int = 0) -> [String: Any] {
 func find(_ label: String, in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
     guard depth < 20 else { return nil }
     let role = attribute(element, kAXRoleAttribute) as? String ?? ""
-    if [kAXButtonRole, kAXRadioButtonRole, kAXLinkRole].contains(role),
+    if [kAXButtonRole, kAXRadioButtonRole].contains(role),
        [kAXTitleAttribute, kAXDescriptionAttribute].contains(where: { attribute(element, $0) as? String == label }) {
         return element
     }
