@@ -1,50 +1,120 @@
-name: Build Windows Installer
+name: Swift tests and macOS app
+run-name: Swift tests and macOS app (${{ github.ref_name }})
 
 on:
+  pull_request:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      capture_ui:
+        description: Capture real native work, rest, calendar, template and hover drawer windows
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: swift-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  build:
-    runs-on: windows-latest
-    env:
-      # 覆盖仓库 .npmrc 里的国内镜像：GitHub runner 直连官方源更快
-      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
-      ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+  linux-core:
+    name: Swift 6.0.3 core tests (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: swift:6.0.3-noble
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          persist-credentials: false
+      - name: Test core and parse native sources (not a macOS build)
+        run: ./scripts/verify.sh -Xswiftc -warnings-as-errors
 
-      - name: 安装依赖
-        run: npm ci
-
-      - name: 单元测试
-        run: npm test
-
-      - name: 打包 NSIS 安装包
-        run: npx electron-builder --win nsis --publish never
-
-      - name: 上传构建产物（所有触发方式都可下载）
+  macos-app:
+    name: macOS app / ${{ matrix.runner }} / Xcode ${{ matrix.xcode }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            xcode: '16'
+          - runner: macos-15
+            xcode: '16.4'
+    env:
+      # Per-job selection only; no sudo xcode-select or saved environment changes.
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record toolchain and platform
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+          uname -m
+      - name: Test core and compile/link the real SwiftUI and AppKit app
+        run: ./scripts/verify.sh -Xswiftc -warnings-as-errors
+      - name: Build and verify local release bundle (ad-hoc signing only)
+        run: ./scripts/build-macos.sh release
+      - name: Verify binary architecture and bundle deployment target
+        run: |
+          test -x dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          file dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          lipo -archs dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          lipo dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer -verify_arch "$(uname -m)"
+          xcrun vtool -show-build dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer | tee /tmp/pomodoro-build-version.txt
+          awk '$1 == "minos" { seen = 1; if ($2 != "13.0") exit 1 } END { if (!seen) exit 1 }' /tmp/pomodoro-build-version.txt
+          test "$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' dist/PomodoroTimer.app/Contents/Info.plist)" = '13.0'
+      - name: Package and verify the extracted distributable
+        run: ./scripts/package-macos.sh
+      - name: Upload application packages for tag publication
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
-          name: PomodoroTimer-Setup
-          path: dist/PomodoroTimer-Setup-*.exe
-
-      - name: 发布 Release（仅 tag 触发）
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+          name: release-package-${{ matrix.runner }}-${{ github.sha }}
+          path: dist/packages/*
+          retention-days: 14
+          if-no-files-found: error
+      - name: Capture real native UI using existing GUI permissions
+        if: github.event_name == 'workflow_dispatch' && inputs.capture_ui
+        timeout-minutes: 3
+        run: python3 scripts/probe-macos-ui.py dist/PomodoroTimer.app "${{ runner.temp }}/pomodoro-ui"
+      - name: Upload native screenshots and provenance
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.capture_ui
+        uses: actions/upload-artifact@v4
         with:
-          # latest.yml + blockmap 是应用内自动更新（electron-updater）的元数据，缺一不可
-          files: |
-            dist/PomodoroTimer-Setup-*.exe
-            dist/PomodoroTimer-Setup-*.exe.blockmap
-            dist/latest.yml
-          generate_release_notes: true
+          name: native-ui-${{ matrix.runner }}-${{ github.sha }}
+          path: ${{ runner.temp }}/pomodoro-ui/
+          retention-days: 14
+          if-no-files-found: error
+      # No signing secrets, notarization, or system permission changes.
+
+  publish:
+    name: Publish verified macOS release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-core, macos-app]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-package-*-${{ github.sha }}
+          path: release-assets
+          merge-multiple: true
+      - name: Verify tag, upload draft, download and check assets, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: ./scripts/publish-release.sh release-assets
