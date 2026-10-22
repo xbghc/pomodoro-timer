@@ -46,7 +46,7 @@
 | macOS 宿主 | `PomodoroApp.swift`、`AppModel.swift` | 单实例、菜单栏、主窗口、系统睡眠/唤醒与时区通知 |
 | 原生窗口 | `DrawerController.swift` | 悬停抽屉、跨空间、实际命中范围 |
 
-领域库只依赖 Foundation，应用依赖 SwiftUI/AppKit，全部目标使用 Swift 6 语言模式。UI、窗口控制器与应用模型在 MainActor；系统通知显式交付到主队列，休眠回调同步保存检查点，延迟收起使用可取消的 MainActor Task。Package.swift 在非 macOS 上只声明领域库与测试目标，没有用一个 Linux 空壳冒充原生应用。
+领域库使用 Foundation，几何布局在 Apple 平台显式导入 CoreGraphics，Linux 使用 Foundation 提供的几何类型；应用依赖 SwiftUI/AppKit，全部目标使用 Swift 6 语言模式。UI、窗口控制器与应用模型在 MainActor；系统通知显式交付到主队列，休眠回调同步保存检查点，延迟收起使用可取消的 MainActor Task。Package.swift 在非 macOS 上只声明领域库与测试目标，没有用一个 Linux 空壳冒充原生应用。
 
 ## 窗口机制及实机限制
 
