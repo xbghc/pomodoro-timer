@@ -1,5 +1,11 @@
 # 实际验证记录
 
+## 2026-10-22：完整真实截图与发布准备
+
+[运行 39727287792](https://github.com/xbghc/pomodoro-timer/actions/runs/39727287792)，提交 `3bdca592528b38d6e25e3ad6680d93df32fbd801`：Linux、Intel 和 ARM 的 58 项测试均通过，两种 Mac 原生编译、链接、release 打包和部署目标检查通过；每种架构实际生成 9 张窗口/桌面截图。全部图片下载后核对 SHA-256；ARM 全套逐张目视确认，Intel 抽检主窗口和桌边展开。通过真实指针移动观察到抽屉从 12×92 展开到 348×304；没有改变安全权限。等待截图由手动结束休息获得，未据此声称已完成自然到点的 UI 验收。
+
+后续经用户授权补充 v2.0.0 发布流程：PR 和 main 的 Mac 构建会生成 ZIP 并解压验证；标签流程在全部测试与两个架构通过后创建 Release 草稿，上传并重新下载校验两个 ZIP 与 SHA256SUMS，最后才公开发布。具体发布结果以对应 tag 的 GitHub Actions 和 Release 为准；新增发布自动化不修改应用业务代码。历史条目中的“尚未推送/合并/发布”描述各条目记录时的状态。
+
 ## 2026-10-22：真实 GUI 探测与截图路径
 
 [运行 39725980405](https://github.com/xbghc/pomodoro-timer/actions/runs/39725980405)，提交 `4aaa724d52fbf3e111d5dd69988a520e5ab5aea0`：Linux、Intel 和 ARM Mac 全部通过。两种 Mac 都有真实登录图形会话和既有截图/Accessibility/事件发送权限；实际启动 release `.app` 后成功捕获主窗口。ARM 图片已下载并目视确认是本次 SwiftUI 实现，窗口尺寸 860×688；其 runner 显示器为 1024×768，Intel 显示器为 1920×1080。没有更改安全权限或平台配置。

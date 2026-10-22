@@ -5,6 +5,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       capture_ui:
@@ -17,7 +18,7 @@ permissions:
 
 concurrency:
   group: swift-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   linux-core:
@@ -70,6 +71,16 @@ jobs:
           xcrun vtool -show-build dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer | tee /tmp/pomodoro-build-version.txt
           awk '$1 == "minos" { seen = 1; if ($2 != "13.0") exit 1 } END { if (!seen) exit 1 }' /tmp/pomodoro-build-version.txt
           test "$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' dist/PomodoroTimer.app/Contents/Info.plist)" = '13.0'
+      - name: Package and verify the extracted distributable
+        run: ./scripts/package-macos.sh
+      - name: Upload application packages for tag publication
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package-${{ matrix.runner }}-${{ github.sha }}
+          path: dist/packages/*
+          retention-days: 14
+          if-no-files-found: error
       - name: Capture real native UI using existing GUI permissions
         if: github.event_name == 'workflow_dispatch' && inputs.capture_ui
         timeout-minutes: 3
@@ -82,4 +93,28 @@ jobs:
           path: ${{ runner.temp }}/pomodoro-ui/
           retention-days: 14
           if-no-files-found: error
-      # No release, deployment, signing secret, notarization, or permission changes.
+      # No signing secrets, notarization, or system permission changes.
+
+  publish:
+    name: Publish verified macOS release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-core, macos-app]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-package-*-${{ github.sha }}
+          path: release-assets
+          merge-multiple: true
+      - name: Verify tag, upload draft, download and check assets, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: ./scripts/publish-release.sh release-assets

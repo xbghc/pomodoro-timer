@@ -74,4 +74,4 @@ Artifacts 名称包含 runner 和提交 SHA，保留 14 天。`manifest.json` �
 
 [工作流](../.github/workflows/build.yml) 在标准 `macos-15-intel` / Xcode 16.0 和 `macos-15` / Xcode 16.4 上运行测试、编译和链接，执行 `build-macos.sh release`，检查本地 ad-hoc 签名、Mach-O 架构和 `minos 13.0`。Linux 路径使用 Swift 6.0.3。旧 Windows 发布和 Storybook/Pages 部署已删除。
 
-无应用上传、发布、公证、秘密或付费服务设置；仅请求仓库读取权限。可选截图流程仅上传截图与诊断 artifacts。经用户授权，独立分支已推送并运行远端工作流，具体提交与检查结果见 [验证记录](validation.md)。CI 通过后仍须完成上方窗口和系统行为的人工验收。
+普通验证 job 只有仓库读取权限；可选截图流程上传截图与诊断 artifacts。经后续合并发布授权，标签流程会上传两个架构的 ZIP 和校验和，由独立发布 job 在全部检查通过后发布 GitHub Release；无公证、签名秘密、付费服务或平台环境变更。ZIP 解压后的签名、可执行权限及架构也会校验。CI 通过后仍须完成上方窗口和系统行为的人工验收。
