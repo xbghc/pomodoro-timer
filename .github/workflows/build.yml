@@ -1,4 +1,5 @@
 name: Swift tests and macOS app
+run-name: Swift tests and macOS app (${{ github.ref_name }})
 
 on:
   pull_request:
@@ -60,7 +61,7 @@ jobs:
           test -x dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
           file dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
           lipo -archs dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
-          lipo -verify_arch "$(uname -m)" dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer
+          lipo dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer -verify_arch "$(uname -m)"
           xcrun vtool -show-build dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer | tee /tmp/pomodoro-build-version.txt
           awk '$1 == "minos" { seen = 1; if ($2 != "13.0") exit 1 } END { if (!seen) exit 1 }' /tmp/pomodoro-build-version.txt
           test "$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' dist/PomodoroTimer.app/Contents/Info.plist)" = '13.0'
