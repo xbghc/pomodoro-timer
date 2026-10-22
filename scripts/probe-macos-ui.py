@@ -24,7 +24,7 @@ def inspect(name):
 
 
 before = inspect("session-before-launch")
-if not before["onConsole"] or not before["loginDone"] or not before["screens"]:
+if not before["sessionAvailable"] or not before["loginDone"] or not before["screens"]:
     sys.exit("No logged-in graphical session with an attached display; no permissions changed.")
 
 try:
