@@ -2,6 +2,8 @@
 
 2026-10-21，对 `3eec263` 后续改动及全部 Swift 源码、测试、打包脚本、Info.plist 和工作流逐项审查。执行平台为 Linux；这是源码与可运行核心验证，**不是 macOS SDK 类型检查或应用运行验收**。
 
+2026-10-22，按最新要求移除全屏休息后，复查主窗口/抽屉入口、应用模型回调和生命周期引用。多屏休息窗口及其显示状态、屏幕变化处理、退出/睡眠清理均已删除；普通休息提醒和抽屉跨其他应用全屏的行为保留。对应复测见 [验证记录](validation.md)。
+
 ## 确认并修复的问题
 
 | 范围 | 问题与结果 |
@@ -18,10 +20,10 @@
 ## 审查覆盖与证据边界
 
 - **SwiftUI 类型/API**：检查了 View builder 分支、`@State`/`@ObservedObject`、DatePicker、Form、颜色/形状样式、菜单、sheet、日历坐标及整数/CGFloat 转换。影响最低版本的 [GroupedFormStyle](https://developer.apple.com/documentation/swiftui/groupedformstyle) 自 macOS 13 提供；其余使用的 SwiftUI 能力不要求更高的运行版本。原生类型检查交由新增 Mac CI，尚未执行。
-- **AppKit API**：核对了 [NSTrackingArea 初始化参数](https://developer.apple.com/documentation/appkit/nstrackingarea/init(rect:options:owner:userinfo:))、[makeKey](https://developer.apple.com/documentation/appkit/nswindow/makekey())、NSPanel/NSWindow 属性与集合行为；未把语法解析当作 SDK 链接证据。
+- **AppKit API**：核对了 [NSTrackingArea 初始化参数](https://developer.apple.com/documentation/appkit/nstrackingarea/init(rect:options:owner:userinfo:))、NSPanel/NSWindow 属性与集合行为；未把语法解析当作 SDK 链接证据。
 - **Actor 隔离**：核对 Apple 文档中 `applicationDidFinishLaunching`、`menuWillOpen` 的 MainActor 声明，UI 所有者统一隔离。Swift 6.0.3 本地 `_Concurrency.swiftinterface` 声明 `MainActor.assumeIsolated` 可用于 macOS 10.15+，仅在 `queue: .main` 保证的回调内使用。Linux 核心以 Swift 6 + warnings-as-errors 编译通过；AppKit 导入的完整隔离诊断仍待 Mac 编译。
 - **时间与持久化**：检查固定终点优先、连续记录不拆分、休息等待、当天模板的本地日界线、跨午夜、23/25/23.5 小时日、回拨阻止写入、正常睡眠/退出、异常检查点恢复、原子文件与稳定 ID。新增测试核对休息中崩溃不能补记至原计划休息结束。
-- **窗口行为**：收起时真实 NSPanel 尺寸为 12×92；布局选择物理屏幕外侧，支持负坐标。悬停/提醒/Space 切换都不调用 activate。全屏遮罩只由用户按钮触发。实际跨 Spaces、其他应用全屏、Dock、Stage Manager、混合缩放与焦点仍必须实机验收。
+- **窗口行为**：收起时真实 NSPanel 尺寸为 12×92；布局选择物理屏幕外侧，支持负坐标。悬停/提醒/Space 切换都不调用 activate。实际跨 Spaces、其他应用全屏、Dock、Stage Manager、混合缩放与焦点仍必须实机验收。
 
 ## 最低版本与 CI 选择
 

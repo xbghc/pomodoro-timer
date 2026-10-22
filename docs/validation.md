@@ -1,8 +1,23 @@
 # 实际验证记录
 
+## 2026-10-22：移除全屏休息
+
+开始时位于 `codex/macos-swiftui-rewrite`，基线 `1049da7`，工作区干净；未发现额外 `AGENTS.md` 或仓库技能。本次仍为 Debian GNU/Linux 13 x86_64，没有 macOS SDK 或 `xcodebuild`。旧临时工具链已不在新环境中，重新从 Swift 官方下载同一 Swift 6.0.3 至 `/tmp/pomodoro-swift-toolchain`，没有修改平台环境设置。
+
+- 删除多屏休息窗口文件、主窗口/抽屉的全屏入口、应用模型专用回调和参数，以及退出、睡眠、屏幕变化和状态刷新中的专用窗口处理。
+- 领域状态与持久化格式没有修改；普通休息到点事件和倒计时继续服务主窗口/抽屉。加强已有确定性测试，核对休息仅提醒一次、等待期间记录/统计不增长、手动恢复从点击时刻开始并获得完整 30 分钟。
+- 使用下方相同的 `verify.sh` 命令和 `/tmp` 缓存参数，启用 Swift 6 语言模式与 `-Xswiftc -warnings-as-errors`。脚本退出 **0**，2026-10-22 04:25:39 UTC：**58 项 XCTest，0 失败，无编译警告**；测试组数量保持 29 / 9 / 17 / 3。临时完整日志：`/tmp/pomodoro-remove-fullscreen-verification.log`。
+- 原生源码的 `swiftc -frontend -parse` 通过，**仅语法解析**；`bash -n scripts/verify.sh scripts/build-macos.sh` 和 `git diff --check` 通过。
+- 搜索确认 Swift 源码中没有全屏休息入口、控制器或专用回调残留。抽屉仍保留 `.fullScreenAuxiliary`，用于其他应用全屏空间中的悬停唤出，符合原设计。
+- README、设计、静态审查和 macOS 验收清单同步更新；新增人工检查普通休息不会打开覆盖其他应用/显示器的窗口。
+
+macOS SDK 类型检查、链接、打包和原生 UI 验收**仍未执行**：Linux 无法运行 SwiftUI/AppKit。具体步骤见 [macOS 验收清单](macos-acceptance.md)。这是平台能力限制，不是权限拒绝；本轮没有推送、合并、发布或触发远端 CI，CI 文件与平台保存配置未修改。
+
+## 2026-10-21：原生重写与静态审查
+
 日期：2026-10-21。环境：Debian GNU/Linux 13、x86_64；工作目录 `/workspace/pomodoro-timer`。
 
-## 基线与范围
+### 基线与范围
 
 - 开始时分支为 `work`，提交 `0931ff38cb3d04f3e6b15db9fb43ae29defff216`，工作区干净。
 - 未发现仓库/上级 `AGENTS.md`，`/workspace/.agents/skills` 不存在；没有额外仓库技能可执行。
@@ -11,7 +26,7 @@
 - 首次原生实现提交 `3eec263` 的核心测试为 47 项；后续静态审查与修复将当前测试增加到 58 项，下面记录最终结果。
 - PATH 原本没有 Swift。从 Swift 官方下载的 Swift 6.0.3 Ubuntu 24.04 x86_64 工具链临时解压至 `/tmp/pomodoro-swift-toolchain`，实际 `swift --version` 为 `Swift version 6.0.3 (swift-6.0.3-RELEASE)`。工具链、构建和缓存均在 `/tmp`，没有加入仓库或修改系统安装/共享环境配置。
 
-## 已执行且通过
+### 已执行且通过
 
 最终通过统一验证脚本运行：
 
@@ -55,7 +70,7 @@ Executed 58 tests, with 0 failures (0 unexpected)
 
 后续新增的 Lord Howe 半小时夏令时测试最初失败：Foundation `.nextTime` 将缺失的 02:10 解析为次日。改成逐分钟寻找当天有效时刻后，包含该项的最终 58 项全部通过。详细修复与 API/并发审查见 [静态审查记录](static-review.md)。
 
-## 未执行，不能视为通过
+### 未执行，不能视为通过
 
 - macOS SDK 下的 SwiftUI/AppKit **类型检查、链接、应用启动**。
 - `.app` 打包脚本中的 `plutil`、`codesign` 和 Finder 启动。

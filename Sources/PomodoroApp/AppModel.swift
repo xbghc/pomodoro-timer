@@ -14,7 +14,6 @@ final class AppModel: ObservableObject {
 
     let directory: URL
     var openCalendar: (@MainActor () -> Void)?
-    var enterFullScreenRest: (@MainActor () -> Void)?
     var onReminder: (@MainActor (String) -> Void)?
     var onChange: (@MainActor () -> Void)?
     private var session: ActivitySession?
@@ -86,9 +85,8 @@ final class AppModel: ObservableObject {
     func startWork(minutes: Int? = nil) {
         action { try $0.startWork(at: $1, minutes: minutes) }
     }
-    func startRest(minutes: Int? = nil, fullScreen: Bool = false) {
+    func startRest(minutes: Int? = nil) {
         action { try $0.startRest(at: $1, minutes: minutes) }
-        if fullScreen, active?.kind == .rest, !isBlocked { enterFullScreenRest?() }
     }
     func deferReminder(minutes: Int = 60) { action { try $0.deferReminder(at: $1, minutes: minutes) } }
     func stop() { action { try $0.stop(at: $1) } }

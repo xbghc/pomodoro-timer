@@ -12,7 +12,7 @@
 - 固定起点自动开始工作；固定终点停止当前活动并提示。中途启动只从当前时刻记录，不补记此前时段。
 - 日历区分只读计划和可修改实际记录。所有已结束记录都能增改删，包含自动生成的记录。编辑计划不改变实际历史。
 - 数据不自动清空或过期。睡眠、退出、未运行期间不计时，可手动补录。没有旧版读取、迁移或删除旧文件的代码。
-- 桌边 hover 抽屉是主要交互，不是菜单栏弹窗。悬停和提醒不请求键盘焦点。全屏休息必须由用户主动选择，只显示一句复盘提示，没有日志/下一步表单或外部集成。
+- 桌边 hover 抽屉是主要交互，不是菜单栏弹窗。悬停和提醒不请求键盘焦点。普通休息通过抽屉、主窗口或菜单栏控制，主窗口显示剩余时间。没有日志/下一步表单或外部集成。
 
 ## 明确选择的工程默认值
 
@@ -44,7 +44,7 @@
 | 布局 | `DrawerGeometry.swift` | 多屏外缘选择与两种真实窗口尺寸，可在 Linux 单测 |
 | SwiftUI | `MainView.swift`、`HistoryView.swift` | 当前活动、临时时长、今日模板、计划/实际日历与历史编辑 |
 | macOS 宿主 | `PomodoroApp.swift`、`AppModel.swift` | 单实例、菜单栏、主窗口、系统睡眠/唤醒与时区通知 |
-| 原生窗口 | `DrawerController.swift`、`RestWindowController.swift` | 悬停抽屉、跨空间、实际命中范围、用户选择的多屏休息 |
+| 原生窗口 | `DrawerController.swift` | 悬停抽屉、跨空间、实际命中范围 |
 
 领域库只依赖 Foundation，应用依赖 SwiftUI/AppKit，全部目标使用 Swift 6 语言模式。UI、窗口控制器与应用模型在 MainActor；系统通知显式交付到主队列，休眠回调同步保存检查点，延迟收起使用可取消的 MainActor Task。Package.swift 在非 macOS 上只声明领域库与测试目标，没有用一个 Linux 空壳冒充原生应用。
 
@@ -52,6 +52,6 @@
 
 抽屉使用 `NSPanel` 的 [nonactivatingPanel](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/nonactivatingpanel)，禁止成为 key/main window，采用 `NSTrackingArea` 的 activeAlways 捕捉非激活应用中的悬停。`LSUIElement`/accessory 运行方式、[canJoinAllSpaces](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallspaces) 与 [fullScreenAuxiliary](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/fullscreenauxiliary) 共同用于跨 Spaces 和普通其他应用全屏。Space 切换只重新放置并 `orderFrontRegardless`，不会调用 activate。
 
-展开为 348×304，收起窗口本身为 12×92，不保留透明全尺寸命中区。屏幕移除/分辨率变化后重算外侧右缘，尽量避开屏幕接缝。打开主窗口和选择全屏休息属于用户主动操作，可以获取焦点。
+展开为 348×304，收起窗口本身为 12×92，不保留透明全尺寸命中区。屏幕移除/分辨率变化后重算外侧右缘，尽量避开屏幕接缝。用户主动打开主窗口时可以获取焦点。
 
 这些 API 设置与几何测试不构成实际 macOS 窗口验收；尤其普通应用全屏、Stage Manager、Dock 位于右侧、多屏混合缩放、各显示器独立 Spaces 和系统版本差异须按验收清单实测。受保护的系统/登录界面不在承诺范围内。

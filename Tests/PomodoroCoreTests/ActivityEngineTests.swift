@@ -48,13 +48,25 @@ final class ActivityEngineTests: XCTestCase {
 
     func testEarlyRestAndManualResumeGetFullThirtyMinutes() throws {
         var engine = try running()
-        try engine.startRest(at: time("10:10"))
+        XCTAssertEqual(try engine.startRest(at: time("10:10")), [])
+        XCTAssertEqual(engine.active?.kind, .rest)
+        XCTAssertEqual(engine.restDeadline, time("10:15"))
         XCTAssertEqual(try engine.tick(at: time("10:15")), [.restFinished])
         XCTAssertTrue(engine.isWaiting)
-        try engine.tick(at: time("10:45"))
+        XCTAssertNil(engine.restDeadline)
+        let completed = engine.snapshot.records
+        XCTAssertEqual(try engine.tick(at: time("10:16")), [])
+        XCTAssertEqual(try engine.tick(at: time("10:45")), [])
         XCTAssertTrue(engine.isWaiting)
+        XCTAssertEqual(engine.snapshot.records, completed)
+        XCTAssertEqual(engine.snapshot.records.map(\.kind), [.work, .rest])
         XCTAssertEqual(engine.snapshot.records.map(\.duration), [600, 300])
-        try engine.startWork(at: time("10:45"))
+        let summary = DailySummary(date: time("10:45"), records: completed, active: engine.active, now: time("10:45"), calendar: utc)
+        XCTAssertEqual(summary.work, 600)
+        XCTAssertEqual(summary.rest, 300)
+        XCTAssertEqual(try engine.startWork(at: time("10:45")), [])
+        XCTAssertEqual(engine.active?.kind, .work)
+        XCTAssertEqual(engine.active?.start, time("10:45"))
         XCTAssertEqual(engine.snapshot.runtime.reminderAt, time("11:15"))
     }
 

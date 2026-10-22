@@ -130,12 +130,9 @@ private struct TodayView: View {
                         }
                         Button("其他时长…") { durationPurpose = .reminder }
                     }.frame(width: 145)
-                    Button("全屏休息") { model.startRest(fullScreen: true) }
                 } else {
                     Button("开始工作") { model.startWork() }.buttonStyle(.borderedProminent)
-                    if model.active?.kind == .rest {
-                        Button("进入全屏休息") { model.enterFullScreenRest?() }
-                    } else {
+                    if model.active == nil {
                         Button("开始休息") { model.startRest() }
                         Button("自定工作时长…") { durationPurpose = .work }
                     }

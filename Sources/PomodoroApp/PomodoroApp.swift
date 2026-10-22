@@ -18,7 +18,6 @@ struct PomodoroApplication {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var model: AppModel?
     private var drawer: DrawerController?
-    private var rest: RestWindowController?
     private var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private var observations: [(NotificationCenter, NSObjectProtocol)] = []
@@ -52,9 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let model = AppModel(directory: directory)
         self.model = model
         drawer = DrawerController(model: model)
-        rest = RestWindowController(model: model)
         model.openCalendar = { [weak self] in self?.showMain() }
-        model.enterFullScreenRest = { [weak self] in self?.rest?.show() }
         model.onReminder = { [weak self] text in self?.drawer?.announce(text) }
         model.onChange = { [weak self] in self?.update() }
         installMenu()
@@ -79,7 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         observations.removeAll()
         DistributedNotificationCenter.default().removeObserver(self)
         drawer?.hide()
-        rest?.hide()
         if lockDescriptor >= 0 { flock(lockDescriptor, LOCK_UN); Darwin.close(lockDescriptor) }
     }
 
@@ -124,10 +120,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc nonisolated private func showMainFromNotification(_ notification: Notification) {
         Task { @MainActor [weak self] in self?.showMain() }
     }
-    private func willSleep() { model?.suspend(); rest?.hide() }
+    private func willSleep() { model?.suspend() }
     private func didWake() { model?.wake(); drawer?.reposition() }
     private func spaceChanged() { drawer?.reposition() }
-    private func screensChanged() { drawer?.reposition(); rest?.screensChanged() }
+    private func screensChanged() { drawer?.reposition() }
     private func timeZoneChanged() { model?.timeZoneChanged() }
     @objc private func startWork() { model?.startWork() }
     @objc private func startRest() { model?.startRest() }
@@ -189,6 +185,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let model else { return }
         statusItem?.button?.title = " \(model.phaseTitle)"
         statusItem?.button?.toolTip = model.detail
-        rest?.update()
     }
 }

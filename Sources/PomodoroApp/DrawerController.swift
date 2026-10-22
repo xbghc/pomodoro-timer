@@ -141,15 +141,10 @@ private struct DrawerContent: View {
                             Button("再专注 1 小时") { model.deferReminder() }
                         } else {
                             Button("开始工作") { model.startWork() }.buttonStyle(.borderedProminent)
-                            if model.active?.kind == .rest {
-                                Button("全屏休息") { model.enterFullScreenRest?() }
-                            } else { Button("开始休息") { model.startRest() } }
+                            if model.active == nil { Button("开始休息") { model.startRest() } }
                         }
                     }.disabled(model.isBlocked)
                     HStack {
-                        if model.active?.kind == .work {
-                            Button("全屏休息") { model.startRest(fullScreen: true) }.disabled(model.isBlocked)
-                        }
                         if model.active != nil { Button("结束") { model.stop() }.disabled(model.isBlocked) }
                         Spacer()
                     }.buttonStyle(.link).font(.caption)
