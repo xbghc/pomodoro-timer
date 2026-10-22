@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       capture_ui:
-        description: Probe the native GUI session and capture the real app window
+        description: Capture real native work, rest, calendar, template and hover drawer windows
         type: boolean
         default: false
 
@@ -70,11 +70,11 @@ jobs:
           xcrun vtool -show-build dist/PomodoroTimer.app/Contents/MacOS/PomodoroTimer | tee /tmp/pomodoro-build-version.txt
           awk '$1 == "minos" { seen = 1; if ($2 != "13.0") exit 1 } END { if (!seen) exit 1 }' /tmp/pomodoro-build-version.txt
           test "$(/usr/libexec/PlistBuddy -c 'Print LSMinimumSystemVersion' dist/PomodoroTimer.app/Contents/Info.plist)" = '13.0'
-      - name: Probe GUI session and capture the real native window
+      - name: Capture real native UI using existing GUI permissions
         if: github.event_name == 'workflow_dispatch' && inputs.capture_ui
         timeout-minutes: 3
         run: python3 scripts/probe-macos-ui.py dist/PomodoroTimer.app "${{ runner.temp }}/pomodoro-ui"
-      - name: Upload GUI probe evidence
+      - name: Upload native screenshots and provenance
         if: always() && github.event_name == 'workflow_dispatch' && inputs.capture_ui
         uses: actions/upload-artifact@v4
         with:

@@ -3,7 +3,8 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
-// Read-only diagnostics. Never request or change TCC/Accessibility permissions.
+// Read-only by default; explicit smoke-test actions use existing permissions only.
+// Never request or change TCC/Accessibility permissions.
 let session = CGSessionCopyCurrentDictionary() as? [String: Any] ?? [:]
 let applications = NSWorkspace.shared.runningApplications.filter {
     $0.bundleIdentifier == "com.ghm.pomodoro-timer.native"
@@ -18,13 +19,49 @@ func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
 
 func describe(_ element: AXUIElement, depth: Int = 0) -> [String: Any] {
     var result: [String: Any] = [:]
-    for name in [kAXRoleAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXIdentifierAttribute] {
+    for name in [kAXRoleAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXIdentifierAttribute, kAXValueAttribute] {
         if let value = attribute(element, name) as? String, !value.isEmpty { result[name] = value }
     }
     if depth < 12, let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] {
         result["children"] = children.prefix(60).map { describe($0, depth: depth + 1) }
     }
     return result
+}
+
+func find(_ label: String, in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    guard depth < 20 else { return nil }
+    let role = attribute(element, kAXRoleAttribute) as? String ?? ""
+    if [kAXButtonRole, kAXRadioButtonRole, kAXLinkRole].contains(role),
+       [kAXTitleAttribute, kAXDescriptionAttribute].contains(where: { attribute(element, $0) as? String == label }) {
+        return element
+    }
+    for child in attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? [] {
+        if let result = find(label, in: child, depth: depth + 1) { return result }
+    }
+    return nil
+}
+
+let arguments = Array(CommandLine.arguments.dropFirst())
+if arguments.first == "--press", arguments.count == 2 {
+    guard AXIsProcessTrusted(), let app = applications.first else { fatalError("Existing Accessibility access and running app required") }
+    let root = AXUIElementCreateApplication(app.processIdentifier)
+    let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
+    guard let main = windows.first(where: { attribute($0, kAXTitleAttribute) as? String == "工作与休息" }),
+          let control = find(arguments[1], in: main) else { fatalError("Visible control not found: \(arguments[1])") }
+    let result = AXUIElementPerformAction(control, kAXPressAction as CFString)
+    guard result == .success else { fatalError("AXPress failed: \(result.rawValue)") }
+    Thread.sleep(forTimeInterval: 0.8)
+} else if arguments.first == "--move-pointer", arguments.count == 3,
+          let x = Double(arguments[1]), let y = Double(arguments[2]), x.isFinite, y.isFinite {
+    guard CGPreflightPostEventAccess(),
+          let event = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                              mouseCursorPosition: CGPoint(x: x, y: y), mouseButton: .left) else {
+        fatalError("Existing event-posting access required")
+    }
+    event.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.8)
+} else if !arguments.isEmpty {
+    fatalError("Unsupported smoke-test action")
 }
 
 let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)

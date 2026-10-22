@@ -17,7 +17,7 @@
 | 检查点校验 | 有限但极端的损坏日期可能进入 Calendar；过期活动/矛盾提醒标记也未充分拒绝。现在限制日历范围，并核对活动截止和提醒标记与观察时刻一致。 |
 | 并发与回调 | 全部目标切换到 Swift 6 严格并发模式。抽屉延迟改为可取消的 MainActor Task；系统通知用主队列同步桥接，特别是睡眠检查点不能被异步跳转推迟。分布式“显示主窗”通知显式跳到 MainActor。 |
 | 焦点/收起 | 保留 nonactivatingPanel 和禁止成为 key/main window；重复 hover 不重启动画，Space/屏幕变更后可按指针位置收起。只有用户打开主窗才调用 activate，并区分 macOS 13 与 14+ API。 |
-| CI | 移除 Windows 发布、Storybook/Pages 部署与 Electron npm 镜像配置；新增 Linux 核心、Intel 最低工具链和 Apple Silicon macOS 编译/链接/本地打包。无上传、发布、签名秘密或远端环境设置。 |
+| CI | 移除 Windows 发布、Storybook/Pages 部署与 Electron npm 镜像配置；新增 Linux 核心、Intel 最低工具链和 Apple Silicon macOS 编译/链接/本地打包。无应用上传、发布、签名秘密或远端环境设置；后续按截图要求添加的可选步骤只上传截图与诊断。 |
 | macOS 几何 API | Foundation 在 Apple 平台中未提供 CGRect 的完整 Swift 接口与 Equatable 一致性，导致首次 Mac 编译失败。布局源文件及测试现在按 canImport(CoreGraphics) 显式导入；Linux 继续使用 Foundation 的几何实现。 |
 | 架构检查 | lipo 的 -verify_arch 将后续参数视为架构列表，原来的末尾文件名被误解析。现在把二进制路径放在选项前，实际架构、Mach-O minos 与 Info.plist 部署目标仍严格检查。 |
 

@@ -1,4 +1,4 @@
-# macOS 交互验收清单（尚未执行）
+# macOS 交互验收清单（完整人工验收尚未完成）
 
 应用最低运行系统为 macOS 13.0；源码最低为 Xcode 16.0 / Swift 6.0（Swift 6 语言模式），安装 Xcode 16.0 的开发机最低为 macOS 14.5。先在符合工具链要求的 Mac 运行：
 
@@ -8,7 +8,30 @@
 open dist/PomodoroTimer.app
 ```
 
-构建/打包脚本仅在执行机器生成应用，不上传、不公证、不发布。本地执行器仍为 Linux；远端 Mac CI 已实际执行原生类型检查、链接和打包，结果见 [验证记录](validation.md)。以下窗口、操作和系统行为仍需在可交互的真实 Mac 上逐项验收，CI 不提供这些结果或运行截图。
+构建/打包脚本仅在执行机器生成应用，不上传、不公证、不发布。本地执行器仍为 Linux；远端 Mac CI 已实际执行原生类型检查、链接和打包，结果见 [验证记录](validation.md)。可选截图流程会在 runner 的真实登录图形会话中启动应用；它只覆盖记录下来的单屏操作，以下跨 Spaces、焦点、系统行为与最低系统支持仍需完整人工验收。
+
+## 真实 UI 截图与核心操作
+
+手动运行工作流并启用 `capture_ui`。脚本先读取会话、显示器及既有权限，启动本次构建的 release `.app`，再通过现有控件的 Accessibility `AXPress` 和真实指针移动操作应用。不会修改 TCC、安全权限、应用数据模型或界面；若环境不具备条件就停止并上传诊断记录。
+
+```bash
+gh workflow run build.yml --ref codex/macos-swiftui-rewrite -f capture_ui=true
+```
+
+| 图片 | 操作与预期画面 |
+| --- | --- |
+| `01-main-work.png` | 打开主窗口，在“当前”点“开始工作”，显示连续工作时长与下次提醒。 |
+| `02-main-rest.png` | 点“休息 5 分钟”，普通休息计时开始，“当前”显示剩余分钟。 |
+| `03-main-waiting.png` | 点“结束当前活动”，进入等待；此图记录手动结束，不能据此声称已等待休息自然到点。 |
+| `04-desktop-drawer-collapsed.png` | 手动重新工作，指针离开把手，桌边窗口收起为 12×92。 |
+| `05-drawer-work.png`、`06-desktop-drawer-expanded.png` | 指针移入把手，实际窗口展开为 348×304；分别捕获窗口和桌面位置。 |
+| `07-drawer-rest.png` | 点普通休息按钮后捕获抽屉的休息状态。 |
+| `08-calendar.png` | 打开“日历”，查看只读计划与操作过程中产生的实际记录。 |
+| `09-templates.png` | 打开“工作模板”，查看当天模板选择和 JSON 配置入口。 |
+
+Artifacts 名称包含 runner 和提交 SHA，保留 14 天。`manifest.json` 包含源码提交、工作流运行号、架构、应用二进制和 PNG 的 SHA-256；每张图来自系统 `screencapture`，没有替代原型。若有权限或窗口问题，诊断文件与已完成图片仍会保存。脚本限定在一次性 GitHub runner 中执行，拒绝操作已存在的应用实例，结束时只清理本次启动的进程。
+
+截图与单次 hover 检查不证明跨 Spaces、其他应用全屏、键盘焦点、多屏命中或睡眠集成已经验收。休息自然结束进入等待、延长专注、固定截止、历史 CRUD 等时间/数据规则的确定性测试也不能替代对应 UI 操作验收。
 
 ## 窗口与焦点
 
@@ -51,4 +74,4 @@ open dist/PomodoroTimer.app
 
 [工作流](../.github/workflows/build.yml) 在标准 `macos-15-intel` / Xcode 16.0 和 `macos-15` / Xcode 16.4 上运行测试、编译和链接，执行 `build-macos.sh release`，检查本地 ad-hoc 签名、Mach-O 架构和 `minos 13.0`。Linux 路径使用 Swift 6.0.3。旧 Windows 发布和 Storybook/Pages 部署已删除。
 
-无上传、发布、公证、秘密或付费服务设置；仅请求仓库读取权限。经用户授权，独立分支已推送并运行远端工作流，具体提交与检查结果见 [验证记录](validation.md)。CI 通过后仍须完成上方窗口和系统行为的人工验收。
+无应用上传、发布、公证、秘密或付费服务设置；仅请求仓库读取权限。可选截图流程仅上传截图与诊断 artifacts。经用户授权，独立分支已推送并运行远端工作流，具体提交与检查结果见 [验证记录](validation.md)。CI 通过后仍须完成上方窗口和系统行为的人工验收。

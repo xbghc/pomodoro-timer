@@ -1,5 +1,13 @@
 # 实际验证记录
 
+## 2026-10-22：真实 GUI 探测与截图路径
+
+[运行 39725980405](https://github.com/xbghc/pomodoro-timer/actions/runs/39725980405)，提交 `4aaa724d52fbf3e111d5dd69988a520e5ab5aea0`：Linux、Intel 和 ARM Mac 全部通过。两种 Mac 都有真实登录图形会话和既有截图/Accessibility/事件发送权限；实际启动 release `.app` 后成功捕获主窗口。ARM 图片已下载并目视确认是本次 SwiftUI 实现，窗口尺寸 860×688；其 runner 显示器为 1024×768，Intel 显示器为 1920×1080。没有更改安全权限或平台配置。
+
+更早的探测脚本把 `kCGSessionOnConsoleKey` 的符号名称当成了实际字典键，提前退出。改用 SDK 常量后 `onConsole` 为 true。这个脚本错误不能作为 runner 没有 GUI 的证据。
+
+在此基础上扩展的可选 `capture_ui` 步骤使用现有按钮和真实指针，捕获工作、普通休息、等待、收起/展开抽屉、日历和模板。每次实际运行的截图清单、哈希和执行结果保存在该次 artifact 的 `manifest.json`；[操作及限制](macos-acceptance.md) 中明确区分真实截图、单屏 smoke 操作与仍需完成的人工验收。应用源文件没有为了截图更换界面或注入演示状态。
+
 ## 2026-10-22：获准推送与真实 macOS CI
 
 用户批准推送后，以普通 fast-forward 推送发布独立分支 `codex/macos-swiftui-rewrite`。首次远端 SHA 核实为 `181363ce4058f406bfeae18ed4a6f3f0e901ba85`，后续修复提交同样逐次核对远端 SHA；没有强制覆盖、合并 main、发布版本或修改平台保存的环境设置。

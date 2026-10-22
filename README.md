@@ -89,4 +89,4 @@ docs/                      # 设计、真实验证结果、macOS 人工验收
 - Apple Silicon macOS + Xcode 16.4：测试、真实编译与链接。
 - 两条 Mac 路径均构建 release `.app`，使用本地 ad-hoc 签名，检查签名、架构和 macOS 13.0 最低部署目标。
 
-工作流仅有 `contents: read` 权限，没有 Release、Pages、产物上传、公证或签名秘密，也不使用大型/自托管付费 runner。它可由 PR、main 分支提交或手动触发。经用户授权，独立分支已推送并运行远端 CI；提交、运行链接及各项结果见 [验证记录](docs/validation.md)。没有合并到 main、发布版本或改动平台保存的云环境配置。CI 构建通过不代表已完成窗口交互、macOS 13 实机运行或截图验收。
+工作流仅有 `contents: read` 权限，没有 Release、Pages、公证或签名秘密，也不使用大型/自托管付费 runner。普通构建不上传应用；手动启用 `capture_ui` 时，只上传真实窗口截图和诊断记录，保留 14 天，见 [截图验收步骤](docs/macos-acceptance.md)。它可由 PR、main 分支提交或手动触发。经用户授权，独立分支已推送并运行远端 CI；提交、运行链接及各项结果见 [验证记录](docs/validation.md)。没有合并到 main、发布版本或改动平台保存的云环境配置。CI 构建和截图不替代完整窗口交互及 macOS 13 实机验收。
