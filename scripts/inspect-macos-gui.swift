@@ -28,26 +28,42 @@ func describe(_ element: AXUIElement, depth: Int = 0) -> [String: Any] {
     return result
 }
 
-func find(_ label: String, in element: AXUIElement, depth: Int = 0) -> AXUIElement? {
+func find(_ label: String, in element: AXUIElement, identifier: Bool = false, depth: Int = 0) -> AXUIElement? {
     guard depth < 20 else { return nil }
     let role = attribute(element, kAXRoleAttribute) as? String ?? ""
-    if [kAXButtonRole, kAXRadioButtonRole].contains(role),
+    if identifier, attribute(element, kAXIdentifierAttribute) as? String == label { return element }
+    if !identifier, [kAXButtonRole, kAXRadioButtonRole].contains(role),
        [kAXTitleAttribute, kAXDescriptionAttribute].contains(where: { attribute(element, $0) as? String == label }) {
         return element
     }
     for child in attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? [] {
-        if let result = find(label, in: child, depth: depth + 1) { return result }
+        if let result = find(label, in: child, identifier: identifier, depth: depth + 1) { return result }
     }
     return nil
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
-if arguments.first == "--press", arguments.count == 2 {
+if (arguments.first == "--press" && arguments.count == 2) ||
+    (arguments.first == "--press-in-window" && arguments.count == 3) ||
+    (arguments.first == "--press-status" && arguments.count == 1) {
     guard AXIsProcessTrusted(), let app = applications.first else { fatalError("Existing Accessibility access and running app required") }
     let root = AXUIElementCreateApplication(app.processIdentifier)
-    let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
-    guard let main = windows.first(where: { attribute($0, kAXTitleAttribute) as? String == "工作与休息" }),
-          let control = find(arguments[1], in: main) else { fatalError("Visible control not found: \(arguments[1])") }
+    let control: AXUIElement
+    if arguments.first == "--press-status" {
+        let searchRoot: AXUIElement
+        if let extras = attribute(root, kAXExtrasMenuBarAttribute), CFGetTypeID(extras) == AXUIElementGetTypeID() {
+            searchRoot = unsafeDowncast(extras, to: AXUIElement.self)
+        } else { searchRoot = root }
+        guard let status = find("pomodoro.status", in: searchRoot, identifier: true) else { fatalError("Status button not found") }
+        control = status
+    } else {
+        let title = arguments.count == 3 ? arguments[1] : "工作与休息"
+        let label = arguments.last!
+        let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        guard let target = windows.first(where: { attribute($0, kAXTitleAttribute) as? String == title }),
+              let button = find(label, in: target) else { fatalError("Visible control not found: \(title) / \(label)") }
+        control = button
+    }
     let result = AXUIElementPerformAction(control, kAXPressAction as CFString)
     guard result == .success else { fatalError("AXPress failed: \(result.rawValue)") }
     Thread.sleep(forTimeInterval: 0.8)

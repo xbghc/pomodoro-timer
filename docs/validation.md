@@ -1,5 +1,16 @@
 # 实际验证记录
 
+## 2026-10-29：设计稿 UI 适配（本地验证）
+
+按用户提供的四个 HTML 页面调整原生 UI：360×190 计时小窗与抽屉、248 pt 菜单栏面板、480×520 设置窗；日历与历史编辑移到独立窗口。采用原生字体和 AppKit 窗口控件，未加入 HTML 打包器、字体下载或 WebView。工作/休息/等待与持久化规则不变，新增纯展示层 `TimerReadout` 负责倒计时、超时量和进度。
+
+- 使用临时 Swift 6.0.3 工具链运行 `scripts/verify.sh`，构建与缓存位于 `/tmp/pomodoro-ui-*`，启用 `-Xswiftc -warnings-as-errors`。**65 项 XCTest 全通过、0 失败**，其中 7 项新测试覆盖等待、提醒延长、到点后继续记录、秒数取整、固定截止和休息被下一日程接管。原有 58 项测试保持通过。
+- 应用原生源码与截图辅助 Swift 脚本分别通过 `swiftc -frontend -parse -swift-version 6 -target arm64-apple-macosx13.0`；Python 截图脚本通过 AST 语法解析，`git diff --check` 通过。
+- 已更新 Mac 截图脚本，匹配真实按钮名称、三个独立窗口和新的抽屉尺寸，并包含设置与菜单栏面板截图路径。**脚本本次未在 Mac 执行，未生成原生截图。**
+- 本地是 Linux，无 SwiftUI/AppKit SDK；本次未进行原生类型检查、链接、窗口启动或视觉验收。2026-10-22 的 CI 结果只对应当时的提交，不能证明此次 UI 已在 Mac 通过。待验项目见 [验收清单](macos-acceptance.md)。
+
+此次改动保留在工作区，未推送、发布或触发远端 CI。临时验证日志：`/tmp/pomodoro-ui-verify.log`。
+
 ## 2026-10-22：完整真实截图与发布准备
 
 [运行 39727287792](https://github.com/xbghc/pomodoro-timer/actions/runs/39727287792)，提交 `3bdca592528b38d6e25e3ad6680d93df32fbd801`：Linux、Intel 和 ARM 的 58 项测试均通过，两种 Mac 原生编译、链接、release 打包和部署目标检查通过；每种架构实际生成 9 张窗口/桌面截图。全部图片下载后核对 SHA-256；ARM 全套逐张目视确认，Intel 抽检主窗口和桌边展开。通过真实指针移动观察到抽屉从 12×92 展开到 348×304；没有改变安全权限。等待截图由手动结束休息获得，未据此声称已完成自然到点的 UI 验收。

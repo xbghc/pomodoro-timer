@@ -15,10 +15,14 @@ struct PomodoroApplication {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var drawer: DrawerController?
     private var mainWindow: NSWindow?
+    private var workspaceWindow: NSWindow?
+    private var settingsWindow: NSWindow?
+    private let navigation = WorkspaceNavigation()
+    private let statusPopover = NSPopover()
     private var statusItem: NSStatusItem?
     private var observations: [(NotificationCenter, NSObjectProtocol)] = []
     private var lockDescriptor: Int32 = -1
@@ -51,7 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let model = AppModel(directory: directory)
         self.model = model
         drawer = DrawerController(model: model)
-        model.openCalendar = { [weak self] in self?.showMain() }
+        model.openCalendar = { [weak self] in self?.showCalendar() }
+        model.openActivity = { [weak self] in self?.showWorkspace(tab: .today) }
+        model.openSettings = { [weak self] in self?.showSettings() }
         model.onReminder = { [weak self] text in self?.drawer?.announce(text) }
         model.onChange = { [weak self] in self?.update() }
         installMenu()
@@ -75,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (center, token) in observations { center.removeObserver(token) }
         observations.removeAll()
         DistributedNotificationCenter.default().removeObserver(self)
+        statusPopover.close()
         drawer?.hide()
         if lockDescriptor >= 0 { flock(lockDescriptor, LOCK_UN); Darwin.close(lockDescriptor) }
     }
@@ -82,19 +89,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func showMain() {
         guard let model else { return }
         if mainWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 760),
+            mainWindow = compactWindow(title: "工作与休息", size: NSSize(width: 360, height: 190),
+                                       miniaturizable: true, content: MainView(model: model))
+        }
+        present(mainWindow)
+    }
+
+    @objc private func showCalendar() { showWorkspace(tab: .history) }
+
+    private func showWorkspace(tab: WorkspaceTab) {
+        guard let model else { return }
+        navigation.tab = tab
+        if workspaceWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 720),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.title = "工作与休息"
+            window.title = "工作与休息 · 日历与记录"
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: MainView(model: model))
+            window.contentView = NSHostingView(rootView: WorkspaceView(model: model, navigation: navigation))
+            window.appearance = NSAppearance(named: .aqua)
+            window.backgroundColor = NSColor(PomodoroTheme.background)
             window.minSize = NSSize(width: 780, height: 700)
             window.center()
-            mainWindow = window
+            workspaceWindow = window
         }
+        present(workspaceWindow)
+    }
+
+    @objc private func showSettings() {
+        guard let model else { return }
+        if settingsWindow == nil {
+            settingsWindow = compactWindow(title: "工作与休息 · 设置", size: NSSize(width: 480, height: 520),
+                                           miniaturizable: false, content: SettingsView(model: model))
+        }
+        present(settingsWindow)
+    }
+
+    private func compactWindow<Content: View>(title: String, size: NSSize,
+                                              miniaturizable: Bool, content: Content) -> NSWindow {
+        var mask: NSWindow.StyleMask = [.titled, .closable, .fullSizeContentView]
+        if miniaturizable { mask.insert(.miniaturizable) }
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: mask, backing: .buffered, defer: false)
+        window.title = title
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.isReleasedWhenClosed = false
+        window.isMovableByWindowBackground = true
+        window.appearance = NSAppearance(named: .aqua)
+        window.backgroundColor = NSColor(PomodoroTheme.background)
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = []
+        host.autoresizingMask = [.width, .height]
+        window.contentView = host
+        // Reference dimensions include the title bar; keep native window controls.
+        window.minSize = size
+        window.maxSize = size
+        window.setFrame(NSRect(origin: .zero, size: size), display: false)
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
+        window.center()
+        return window
+    }
+
+    private func present(_ window: NSWindow?) {
+        statusPopover.close()
         // Activation is an explicit user action, never used by hover or reminders.
         if #available(macOS 14, *) { NSApp.activate() }
         else { NSApp.activate(ignoringOtherApps: true) }
-        mainWindow?.makeKeyAndOrderFront(nil)
+        window?.makeKeyAndOrderFront(nil)
     }
 
     private func observeSystem() {
@@ -125,18 +186,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func spaceChanged() { drawer?.reposition() }
     private func screensChanged() { drawer?.reposition() }
     private func timeZoneChanged() { model?.timeZoneChanged() }
-    @objc private func startWork() { model?.startWork() }
-    @objc private func startRest() { model?.startRest() }
-    @objc private func deferReminder() { model?.deferReminder() }
-    @objc private func stopActivity() { model?.stop() }
 
     private func installMenu() {
         let main = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        let show = NSMenuItem(title: "打开工作与休息", action: #selector(showMain), keyEquivalent: "0")
-        show.target = self
-        appMenu.addItem(show)
+        for (title, action, key) in [("打开计时器", #selector(showMain), "0"),
+                                     ("日历与记录…", #selector(showCalendar), "1"),
+                                     ("设置…", #selector(showSettings), ",")] {
+            let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            entry.target = self
+            appMenu.addItem(entry)
+        }
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "退出工作与休息", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -150,40 +211,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         main.addItem(editItem)
         NSApp.mainMenu = main
 
+        guard let model else { return }
+        let controller = NSHostingController(rootView: MenuBarView(model: model,
+            showTimer: { [weak self] in self?.showMain() },
+            showCalendar: { [weak self] in self?.showCalendar() },
+            showSettings: { [weak self] in self?.showSettings() },
+            quit: { NSApp.terminate(nil) }))
+        controller.sizingOptions = [.preferredContentSize]
+        statusPopover.contentViewController = controller
+        statusPopover.contentSize = controller.view.fittingSize
+        statusPopover.behavior = .transient
+        statusPopover.appearance = NSAppearance(named: .aqua)
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "circle.lefthalf.filled", accessibilityDescription: "工作与休息")
-        let menu = NSMenu()
-        menu.delegate = self
-        for (title, action) in [("打开日历与模板", #selector(showMain)), ("开始工作", #selector(startWork)),
-                                ("开始休息", #selector(startRest)), ("再专注 1 小时", #selector(deferReminder)),
-                                ("结束当前活动", #selector(stopActivity))] {
-            let entry = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            entry.target = self
-            menu.addItem(entry)
-        }
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        item.menu = menu
+        item.button?.target = self
+        item.button?.action = #selector(toggleStatusPopover)
+        item.button?.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        item.button?.imagePosition = .imageLeading
+        item.button?.setAccessibilityIdentifier("pomodoro.status")
         statusItem = item
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        guard let model else { return }
-        menu.autoenablesItems = false
-        for item in menu.items {
-            switch item.action {
-            case #selector(startWork): item.isEnabled = !model.isBlocked && model.active?.kind != .work
-            case #selector(startRest): item.isEnabled = !model.isBlocked && model.active?.kind != .rest
-            case #selector(deferReminder): item.isEnabled = !model.isBlocked && model.active?.kind == .work
-            case #selector(stopActivity): item.isEnabled = !model.isBlocked && model.active != nil
-            default: item.isEnabled = true
-            }
-        }
+    @objc private func toggleStatusPopover() {
+        guard let button = statusItem?.button else { return }
+        if statusPopover.isShown { statusPopover.performClose(nil); return }
+        // A menu-bar click is explicit intent; unlike hover, it may take keyboard focus.
+        if #available(macOS 14, *) { NSApp.activate() }
+        else { NSApp.activate(ignoringOtherApps: true) }
+        statusPopover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        statusPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        statusPopover.contentViewController?.view.window?.makeKey()
     }
 
     private func update() {
-        guard let model else { return }
-        statusItem?.button?.title = " \(model.phaseTitle)"
-        statusItem?.button?.toolTip = model.detail
+        guard let model, let button = statusItem?.button else { return }
+        button.title = model.showsMenuBarTimer ? " \(model.isBlocked ? "已暂停" : model.readout.text)" : ""
+        button.toolTip = "\(model.phaseTitle) · \(model.readout.text)\n\(model.detail)"
+        button.setAccessibilityLabel("工作与休息，\(model.phaseTitle)")
+        button.setAccessibilityValue(model.readout.text)
+        let progress = model.readout.progress
+        let color = NSColor(model.tint)
+        let icon = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { _ in
+            let ring = NSBezierPath(ovalIn: NSRect(x: 2, y: 2, width: 12, height: 12))
+            ring.lineWidth = 1.8
+            NSColor.secondaryLabelColor.withAlphaComponent(0.35).setStroke()
+            ring.stroke()
+            let arc = NSBezierPath()
+            arc.lineWidth = 1.8
+            arc.lineCapStyle = .round
+            if progress > 0 {
+                arc.appendArc(withCenter: NSPoint(x: 8, y: 8), radius: 6, startAngle: 90,
+                              endAngle: 90 - CGFloat(progress) * 360, clockwise: true)
+                color.setStroke()
+                arc.stroke()
+            }
+            return true
+        }
+        icon.isTemplate = false
+        button.image = icon
     }
 }

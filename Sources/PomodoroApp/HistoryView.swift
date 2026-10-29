@@ -29,8 +29,8 @@ struct HistoryView: View {
                     .disabled(model.isBlocked || dayInterval.start > model.now)
             }
             HStack(spacing: 24) {
-                Text("实际工作  \(AppModel.minutes(model.summary(for: day).work))").foregroundStyle(Color.accentColor)
-                Text("实际休息  \(AppModel.minutes(model.summary(for: day).rest))").foregroundStyle(.teal)
+                Text("实际工作  \(AppModel.minutes(model.summary(for: day).work))").foregroundStyle(PomodoroTheme.work)
+                Text("实际休息  \(AppModel.minutes(model.summary(for: day).rest))").foregroundStyle(PomodoroTheme.rest)
                 Spacer()
                 Text("等待不计入统计").font(.caption).foregroundStyle(.secondary)
             }.font(.callout)
@@ -83,14 +83,14 @@ struct HistoryView: View {
                 ForEach(records) { record in
                     Button { editing = record } label: {
                         intervalView(start: record.start, end: record.end, width: column - 10,
-                                     color: record.kind == .work ? .accentColor : .teal, label: record.kind.title)
+                                     color: record.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest, label: record.kind.title)
                     }.buttonStyle(.plain).disabled(model.isBlocked)
                         .offset(x: 56 + column, y: offset(record.start))
                         .accessibilityLabel("编辑\(record.kind.title)，\(AppModel.time(record.start)) 至 \(AppModel.time(record.end))")
                 }
                 if let active = model.active, active.start < dayInterval.end, model.observedNow > dayInterval.start {
                     intervalView(start: active.start, end: model.observedNow, width: column - 10,
-                                 color: active.kind == .work ? .accentColor : .teal, label: "\(active.kind.title) · 进行中")
+                                 color: active.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest, label: "\(active.kind.title) · 进行中")
                         .offset(x: 56 + column, y: offset(active.start))
                 }
             }
@@ -124,7 +124,7 @@ struct HistoryView: View {
             if records.isEmpty { Text("这一天还没有已结束的记录。").foregroundStyle(.secondary) }
             ForEach(records) { record in
                 HStack {
-                    Circle().fill(record.kind == .work ? Color.accentColor : .teal).frame(width: 7, height: 7)
+                    Circle().fill(record.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest).frame(width: 7, height: 7)
                     Text(record.kind.title).frame(width: 38, alignment: .leading)
                     Text("\(AppModel.time(record.start)) – \(AppModel.time(record.end))").monospacedDigit()
                     Spacer()
@@ -176,6 +176,6 @@ private struct RecordEditor: View {
                     else { error = model.blockingError ?? model.errorMessage ?? "无法保存记录。" }
                 }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(model.isBlocked)
             }
-        }.padding(24).frame(width: 440)
+        }.padding(24).frame(width: 440).modifier(SurfaceAppearance())
     }
 }

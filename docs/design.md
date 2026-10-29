@@ -42,7 +42,9 @@
 | 状态机 | `ActivityEngine.swift` | 显式时间输入、提醒、计划接管、等待、睡眠/恢复、回拨保护 |
 | 应用服务 | `Persistence.swift` | 注入时钟和存储；候选状态先保存成功再提交；事务与 5 秒检查点 |
 | 布局 | `DrawerGeometry.swift` | 多屏外缘选择与两种真实窗口尺寸，可在 Linux 单测 |
-| SwiftUI | `MainView.swift`、`HistoryView.swift` | 当前活动、临时时长、今日模板、计划/实际日历与历史编辑 |
+| 倒计时展示 | `TimerReadout.swift` | 提醒/固定截止/休息接管的显示投影，不改变活动状态 |
+| SwiftUI | `TimerView.swift`、`MenuBarView.swift`、`SettingsView.swift`、`Theme.swift` | 共用紧凑计时、菜单栏面板、独立设置及视觉样式 |
+| 日历与记录 | `MainView.swift`、`HistoryView.swift` | 当前活动、临时时长、今日模板、计划/实际日历与历史编辑 |
 | macOS 宿主 | `PomodoroApp.swift`、`AppModel.swift` | 单实例、菜单栏、主窗口、系统睡眠/唤醒与时区通知 |
 | 原生窗口 | `DrawerController.swift` | 悬停抽屉、跨空间、实际命中范围 |
 
@@ -52,6 +54,14 @@
 
 抽屉使用 `NSPanel` 的 [nonactivatingPanel](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/nonactivatingpanel)，禁止成为 key/main window，采用 `NSTrackingArea` 的 activeAlways 捕捉非激活应用中的悬停。`LSUIElement`/accessory 运行方式、[canJoinAllSpaces](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallspaces) 与 [fullScreenAuxiliary](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/fullscreenauxiliary) 共同用于跨 Spaces 和普通其他应用全屏。Space 切换只重新放置并 `orderFrontRegardless`，不会调用 activate。
 
-展开为 348×304，收起窗口本身为 12×92，不保留透明全尺寸命中区。屏幕移除/分辨率变化后重算外侧右缘，尽量避开屏幕接缝。用户主动打开主窗口时可以获取焦点。
+展开为 360×190，收起窗口本身为 12×92，不保留透明全尺寸命中区。屏幕移除/分辨率变化后重算外侧右缘，尽量避开屏幕接缝。用户主动打开主窗口时可以获取焦点。
+
+## 2026-10-29 设计稿适配
+
+采用用户提供 HTML 设计稿的紧凑布局：计时小窗 360×190、菜单栏面板宽 248、设置窗 480×520。背景 `#F0F0F2`、正文 `#1C1C1E`、辅助文字 `#6E6E73`、分隔线 `#DCDCE1`、工作 `#E8513F`、休息 `#16956B`。使用设计稿字体栈中的原生系统字体，计时数字采用 72/52 pt 细体、等宽数字与轻微负字距；未引入外部字体或 WebView。小窗使用真实 AppKit 窗口按钮，独立的日历与记录窗口保留完整的历史编辑功能。
+
+设计稿中的暂停续接、四轮长休、全屏休息、声音和开机启动未纳入本次 UI 改动。当前模型只有工作/休息/等待，顶部三个点对应这三个真实状态；活动中的主按钮为明确的停止图标，结束记录后重新开始会取得完整默认时长。默认时长与未来日程仍由 JSON 管理，设置中的数字是只读值。菜单栏倒计时开关是真实本地偏好，使用 UserDefaults 保存，不修改活动文件。
+
+工作倒计时取提醒与固定截止的较早者；提醒已触发后显示 `+MM:SS` 超时量而不自动休息。休息使用引擎提供的实际截止（包含下一固定起点的接管）。底部进度是当前连续活动从开始至当前目标的比例；延长提醒重新计算目标，不拆记录。等待显示下一次默认工作时长；写入失败与时钟回拨时，显示冻结在最后观察时间，错误入口能打开完整说明。图标按钮提供中文名称、悬停提示及键盘焦点反馈，额外操作在右键菜单与日历窗口可达。
 
 这些 API 设置与几何测试不构成实际 macOS 窗口验收；尤其普通应用全屏、Stage Manager、Dock 位于右侧、多屏混合缩放、各显示器独立 Spaces 和系统版本差异须按验收清单实测。受保护的系统/登录界面不在承诺范围内。

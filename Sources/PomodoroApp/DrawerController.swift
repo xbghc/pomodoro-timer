@@ -123,45 +123,12 @@ private struct DrawerContent: View {
     var body: some View {
         Group {
             if presentation.expanded {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Label(model.phaseTitle, systemImage: model.active?.kind == .rest ? "leaf" : "circle.dotted")
-                            .foregroundStyle(model.tint).font(.headline)
-                        Spacer()
-                        Button(action: collapse) { Image(systemName: "chevron.right") }.buttonStyle(.plain).help("收起抽屉")
-                    }
-                    Text(model.active == nil ? "留一点余地" : AppModel.duration(model.elapsed))
-                        .font(.system(size: 32, weight: .light, design: .rounded)).monospacedDigit()
-                    Text(presentation.announcement ?? model.detail).font(.callout).foregroundStyle(.secondary)
-                        .lineLimit(2).frame(maxWidth: .infinity, minHeight: 35, alignment: .leading)
-                    HStack {
-                        if model.active?.kind == .work {
-                            Button("休息 \(model.configuration.breakMinutes) 分钟") { model.startRest() }
-                                .buttonStyle(.borderedProminent)
-                            Button("再专注 1 小时") { model.deferReminder() }
-                        } else {
-                            Button("开始工作") { model.startWork() }.buttonStyle(.borderedProminent)
-                            if model.active == nil { Button("开始休息") { model.startRest() } }
-                        }
-                    }.disabled(model.isBlocked)
-                    HStack {
-                        if model.active != nil { Button("结束") { model.stop() }.disabled(model.isBlocked) }
-                        Spacer()
-                    }.buttonStyle(.link).font(.caption)
-                    Divider()
-                    HStack {
-                        Text("今日工作 \(AppModel.minutes(model.summary(for: model.now).work))")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("日历与模板") { model.openCalendar?() }.buttonStyle(.link).font(.caption)
-                    }
-                }
-                .padding(20)
-                .frame(width: DrawerGeometry.expandedSize.width, height: DrawerGeometry.expandedSize.height)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                CompactTimerView(model: model, announcement: presentation.announcement, collapse: collapse)
+                    .frame(width: DrawerGeometry.expandedSize.width, height: DrawerGeometry.expandedSize.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
             } else {
                 ZStack {
-                    Rectangle().fill(.regularMaterial)
+                    Rectangle().fill(PomodoroTheme.background)
                     Capsule().fill(model.tint.opacity(0.8)).frame(width: 4, height: 42)
                 }
                 .frame(width: DrawerGeometry.collapsedSize.width, height: DrawerGeometry.collapsedSize.height)

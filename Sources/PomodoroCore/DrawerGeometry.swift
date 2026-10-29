@@ -14,7 +14,7 @@ public struct DesktopScreen: Equatable {
 
 /// Coordinates use AppKit's bottom-left origin. The collapsed *window* is small, not merely its content.
 public enum DrawerGeometry {
-    public static let expandedSize = CGSize(width: 348, height: 304)
+    public static let expandedSize = CGSize(width: 360, height: 190)
     public static let collapsedSize = CGSize(width: 12, height: 92)
 
     public static func screen(in screens: [DesktopScreen], preferredID: Int?) -> DesktopScreen? {

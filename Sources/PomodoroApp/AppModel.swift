@@ -11,9 +11,17 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var blockingError: String?
     @Published private(set) var reminderMessage: String?
+    @Published var showsMenuBarTimer = UserDefaults.standard.object(forKey: "showsMenuBarTimer") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(showsMenuBarTimer, forKey: "showsMenuBarTimer")
+            onChange?()
+        }
+    }
 
     let directory: URL
     var openCalendar: (@MainActor () -> Void)?
+    var openActivity: (@MainActor () -> Void)?
+    var openSettings: (@MainActor () -> Void)?
     var onReminder: (@MainActor (String) -> Void)?
     var onChange: (@MainActor () -> Void)?
     private var session: ActivitySession?
@@ -37,7 +45,18 @@ final class AppModel: ObservableObject {
     }
     var tint: Color {
         if isBlocked { return .orange }
-        return active?.kind == .rest ? .teal : (isReminderDue ? .orange : .accentColor)
+        return active?.kind == .rest ? PomodoroTheme.rest : PomodoroTheme.work
+    }
+    var readout: TimerReadout {
+        TimerReadout(runtime: snapshot.runtime, workMinutes: configuration.workMinutes,
+                     now: observedNow, restDeadline: session?.engine.restDeadline)
+    }
+    var timerCaption: String {
+        if isBlocked { return "已暂停 · 查看详情" }
+        if isReminderDue { return "该休息了 · 工作仍在记录" }
+        if active?.kind == .work { return "专注中 · 已工作 \(Self.duration(elapsed))" }
+        if active?.kind == .rest { return "休息中 · 结束后等待" }
+        return "等待 · 准备好再开始"
     }
     var isReminderDue: Bool { active?.kind == .work && snapshot.runtime.reminderDelivered }
     var observedNow: Date {

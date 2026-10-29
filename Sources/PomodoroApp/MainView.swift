@@ -1,16 +1,24 @@
 import SwiftUI
 import PomodoroCore
 
+enum WorkspaceTab: Hashable { case today, history, configuration }
+
 @MainActor
-struct MainView: View {
+final class WorkspaceNavigation: ObservableObject {
+    @Published var tab: WorkspaceTab = .history
+}
+
+@MainActor
+struct WorkspaceView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var navigation: WorkspaceNavigation
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "circle.lefthalf.filled").font(.title2).foregroundStyle(model.tint)
+                Image(systemName: "timer").font(.title2).foregroundStyle(PomodoroTheme.work)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("工作与休息").font(.headline)
-                    Text("给每段时间，留一点余地。").font(.caption).foregroundStyle(.secondary)
+                    Text("日历与记录").font(.system(size: 18, weight: .semibold))
+                    Text("计划与实际，各自清晰。").font(.caption).foregroundStyle(PomodoroTheme.secondary)
                 }
                 Spacer()
                 Text(model.now.formatted(date: .abbreviated, time: .omitted)).foregroundStyle(.secondary)
@@ -20,13 +28,14 @@ struct MainView: View {
             } else if let message = model.errorMessage {
                 errorBanner(message, retry: false)
             }
-            TabView {
-                TodayView(model: model).tabItem { Label("当前", systemImage: "circle.dotted") }
-                HistoryView(model: model).tabItem { Label("日历", systemImage: "calendar") }
-                ConfigurationView(model: model).tabItem { Label("工作模板", systemImage: "slider.horizontal.3") }
+            TabView(selection: $navigation.tab) {
+                TodayView(model: model).tabItem { Label("当前", systemImage: "circle.dotted") }.tag(WorkspaceTab.today)
+                HistoryView(model: model).tabItem { Label("日历", systemImage: "calendar") }.tag(WorkspaceTab.history)
+                ConfigurationView(model: model).tabItem { Label("工作模板", systemImage: "slider.horizontal.3") }.tag(WorkspaceTab.configuration)
             }.padding([.horizontal, .bottom], 16)
         }
         .frame(minWidth: 760, minHeight: 650)
+        .modifier(SurfaceAppearance())
     }
 
     private func errorBanner(_ message: String, retry: Bool) -> some View {
@@ -63,8 +72,8 @@ private struct TodayView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label(model.phaseTitle, systemImage: model.active?.kind == .rest ? "leaf" : "circle.dotted")
                             .foregroundStyle(model.tint).font(.headline)
-                        Text(model.active == nil ? "随时开始" : AppModel.duration(model.elapsed))
-                            .font(.system(size: 46, weight: .light, design: .rounded)).monospacedDigit()
+                        TimerDigits(model: model, size: 64)
+                        Text(model.timerCaption).font(.callout).foregroundStyle(PomodoroTheme.secondary)
                         if let active = model.active {
                             Text("自 \(AppModel.time(active.start)) 起，连续\(active.kind.title)")
                                 .font(.callout).foregroundStyle(.secondary)
@@ -80,7 +89,7 @@ private struct TodayView: View {
                     }.font(.callout)
                 }
                 if model.active?.kind == .rest {
-                    Text("还剩 \(Int(ceil(model.restRemaining / 60))) 分钟").font(.title3).foregroundStyle(.teal)
+                    Text("还剩 \(Int(ceil(model.restRemaining / 60))) 分钟").font(.title3).foregroundStyle(PomodoroTheme.rest)
                 }
                 controls.disabled(model.isBlocked)
                 Divider()
@@ -96,7 +105,7 @@ private struct TodayView: View {
                         ForEach(blocks) { block in
                             HStack {
                                 Image(systemName: block.contains(model.now) ? "circle.inset.filled" : "circle")
-                                    .foregroundStyle(block.contains(model.now) ? Color.accentColor : Color.secondary)
+                                    .foregroundStyle(block.contains(model.now) ? PomodoroTheme.work : PomodoroTheme.secondary)
                                 Text("\(AppModel.time(block.start)) – \(AppModel.time(block.end))").monospacedDigit()
                                 Spacer()
                                 if block.contains(model.now) { Text("当前时段").font(.caption).foregroundStyle(.secondary) }
@@ -166,40 +175,7 @@ private struct DurationSheet: View {
                 Button("确定") { if let value = Int(minutes), valid { save(value); dismiss() } }
                     .buttonStyle(.borderedProminent).disabled(!valid).keyboardShortcut(.defaultAction)
             }
-        }.padding(24).frame(width: 360)
+        }.padding(24).frame(width: 360).modifier(SurfaceAppearance())
         .onAppear { minutes = purpose == .rest ? "5" : "30" }
-    }
-}
-
-@MainActor
-private struct ConfigurationView: View {
-    @ObservedObject var model: AppModel
-    var body: some View {
-        Form {
-            Section("今天使用的模板") {
-                Picker("工作模板", selection: Binding(get: { model.selectedTemplate }, set: { model.selectTemplate($0) })) {
-                    ForEach(model.configuration.templates.keys.sorted(), id: \.self) { Text($0).tag($0) }
-                }.disabled(model.isBlocked)
-                Text("切换只影响今天，次日恢复 JSON 中的星期映射。")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("恢复今天的星期映射") { model.selectTemplate(nil) }.disabled(model.isBlocked)
-            }
-            Section("日程配置") {
-                Text("未来工作时段、模板和星期映射均在 schedule.json 中编辑。修改后重新加载即可生效。")
-                HStack {
-                    Button("打开 JSON") { model.openJSON() }
-                    Button("重新加载") { model.reloadConfiguration() }
-                }
-                Text("默认工作 \(model.configuration.workMinutes) 分钟，休息 \(model.configuration.breakMinutes) 分钟。")
-                    .foregroundStyle(.secondary)
-                Text("初始星期映射只是可编辑示例，未预设你的工作日、周末或特殊周五安排。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("本地数据") {
-                Text("历史不会自动清空。计划修改不会改写实际记录；补录和修改实际记录请到日历。")
-                Button("打开数据文件夹") { model.showDataFolder() }
-                Text(model.directory.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
-        }.formStyle(.grouped).padding(12)
     }
 }

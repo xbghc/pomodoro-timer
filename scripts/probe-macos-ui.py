@@ -48,7 +48,7 @@ def window(report, title):
     return next(w for w in report["windows"] if w["title"] == title)
 
 
-def labels(report):
+def labels(report, title="工作与休息"):
     def walk(node):
         for key in ("AXDescription", "AXTitle", "AXValue"):
             if key in node:
@@ -56,11 +56,19 @@ def labels(report):
         for child in node.get("children", []):
             yield from walk(child)
     return [label for application in report["accessibility"] for w in application["windows"]
-            if w.get("AXTitle") == "工作与休息" for label in walk(w)]
+            if w.get("AXTitle") == title for label in walk(w)]
 
 
 def press(label, name):
     return inspect(name, "--press", label)
+
+
+def press_in_window(title, label, name):
+    return inspect(name, "--press-in-window", title, label)
+
+
+def assert_phase(report, phase):
+    assert f"工作、休息、等待；当前{phase}" in labels(report), f"{phase} state not observed"
 
 
 def capture(name, report, title=None):
@@ -103,13 +111,15 @@ try:
     if "结束当前活动" in labels(report):
         report = press("结束当前活动", "stop-initial-activity")
     report = press("开始工作", "start-work")
-    assert "工作" in labels(report), "Work state not observed"
+    assert_phase(report, "工作")
+    bounds = window(report, "工作与休息")["bounds"]
+    assert (bounds["Width"], bounds["Height"]) == (360, 190), "Compact window size does not match reference"
     capture("01-main-work", report, "工作与休息")
     report = press("休息 5 分钟", "start-rest")
-    assert "休息" in labels(report), "Rest state not observed"
+    assert_phase(report, "休息")
     capture("02-main-rest", report, "工作与休息")
     report = press("结束当前活动", "stop-rest")
-    assert "等待" in labels(report), "Waiting state not observed"
+    assert_phase(report, "等待")
     capture("03-main-waiting", report, "工作与休息")
     report = press("开始工作", "resume-work")
     bounds = window(report, "工作与休息")["bounds"]
@@ -121,15 +131,23 @@ try:
     report = inspect("pointer-on-handle", "--move-pointer", str(bounds["X"] + bounds["Width"] / 2),
                      str(bounds["Y"] + bounds["Height"] / 2))
     drawer = window(report, "工作与休息 · 桌边抽屉")
-    assert drawer["bounds"]["Width"] == 348, "Hover did not expand the drawer"
+    assert (drawer["bounds"]["Width"], drawer["bounds"]["Height"]) == (360, 190), "Hover did not expand the compact drawer"
     capture("05-drawer-work", report, "工作与休息 · 桌边抽屉")
     capture("06-desktop-drawer-expanded", report)
     report = press("休息 5 分钟", "rest-with-drawer")
     capture("07-drawer-rest", report, "工作与休息 · 桌边抽屉")
-    report = press("日历", "open-calendar")
-    capture("08-calendar", report, "工作与休息")
-    report = press("工作模板", "open-templates")
-    capture("09-templates", report, "工作与休息")
+    report = press("设置", "open-settings")
+    settings_title = "工作与休息 · 设置"
+    bounds = window(report, settings_title)["bounds"]
+    assert (bounds["Width"], bounds["Height"]) == (480, 520), "Settings size does not match reference"
+    capture("08-settings", report, settings_title)
+    report = press_in_window(settings_title, "日历与记录…", "open-calendar")
+    workspace_title = "工作与休息 · 日历与记录"
+    capture("09-calendar", report, workspace_title)
+    report = press_in_window(workspace_title, "工作模板", "open-templates")
+    capture("10-templates", report, workspace_title)
+    report = inspect("open-menu-bar", "--press-status")
+    capture("11-menu-bar", report)
     manifest["result"] = "passed"
 finally:
     (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
