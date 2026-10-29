@@ -62,8 +62,13 @@ struct ConfigurationView: View {
                         .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
                 }
                 VStack(alignment: .leading, spacing: 0) {
-                    Toggle("菜单栏显示倒计时", isOn: $model.showsMenuBarTimer)
-                        .toggleStyle(.switch).controlSize(.small).frame(minHeight: 44)
+                    HStack {
+                        Text("菜单栏显示倒计时")
+                        Spacer()
+                        Toggle("菜单栏显示倒计时", isOn: $model.showsMenuBarTimer)
+                            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                            .accessibilityLabel("菜单栏显示倒计时")
+                    }.frame(minHeight: 44)
                     SurfaceDivider()
                     HStack {
                         Text("本地数据")

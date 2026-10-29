@@ -32,7 +32,7 @@ func find(_ label: String, in element: AXUIElement, identifier: Bool = false, de
     guard depth < 20 else { return nil }
     let role = attribute(element, kAXRoleAttribute) as? String ?? ""
     if identifier, attribute(element, kAXIdentifierAttribute) as? String == label { return element }
-    if !identifier, [kAXButtonRole, kAXRadioButtonRole].contains(role),
+    if !identifier, [kAXButtonRole, kAXRadioButtonRole, kAXLinkRole].contains(role),
        [kAXTitleAttribute, kAXDescriptionAttribute].contains(where: { attribute(element, $0) as? String == label }) {
         return element
     }
