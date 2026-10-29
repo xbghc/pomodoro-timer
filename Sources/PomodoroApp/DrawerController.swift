@@ -56,7 +56,7 @@ final class DrawerController {
         panel.isOpaque = false
         panel.hasShadow = false
         panel.isMovable = false
-        panel.title = "工作与休息 · 桌边抽屉"
+        panel.title = "Pomodoro Timer · Edge Drawer"
         let content = DrawerContent(model: model, presentation: presentation,
                                     collapse: { [weak self] in self?.setExpanded(false) })
         let host = HoverHostingView(rootView: content)
@@ -132,7 +132,7 @@ private struct DrawerContent: View {
                     Capsule().fill(model.tint.opacity(0.8)).frame(width: 4, height: 42)
                 }
                 .frame(width: DrawerGeometry.collapsedSize.width, height: DrawerGeometry.collapsedSize.height)
-                .accessibilityLabel("\(model.phaseTitle)，桌边抽屉；在菜单栏也可打开日历")
+                .accessibilityLabel("\(model.phaseTitle), edge drawer. Open the calendar from the menu bar.")
             }
         }.clipped()
     }

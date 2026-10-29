@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Darwin
+import PomodoroCore
 
 @main
 struct PomodoroApplication {
@@ -45,8 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             let alert = NSAlert()
-            alert.messageText = "无法打开本地数据目录"
-            alert.informativeText = error.localizedDescription
+            alert.messageText = "Unable to open the data folder"
+            alert.informativeText = UserFacingError.message(error)
             alert.runModal()
             NSApp.terminate(nil)
             return
@@ -70,10 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model, !model.prepareToQuit() else { return .terminateNow }
         let alert = NSAlert()
-        alert.messageText = "当前数据未能保存"
-        alert.informativeText = "\(model.blockingError ?? model.errorMessage ?? "写入失败")\n退出后只恢复到最后成功保存的检查点。"
-        alert.addButton(withTitle: "取消退出")
-        alert.addButton(withTitle: "仍然退出")
+        alert.messageText = "Your latest changes could not be saved"
+        alert.informativeText = "\(model.blockingError ?? model.errorMessage ?? "Save failed")\nIf you quit, only the last saved checkpoint can be restored."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Quit Anyway")
         return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 
@@ -89,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showMain() {
         guard let model else { return }
         if mainWindow == nil {
-            mainWindow = compactWindow(title: "工作与休息", size: NSSize(width: 360, height: 190),
+            mainWindow = compactWindow(title: "Pomodoro Timer", size: NSSize(width: 360, height: 190),
                                        miniaturizable: true, content: MainView(model: model))
         }
         present(mainWindow)
@@ -103,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if workspaceWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 720),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.title = "工作与休息 · 日历与记录"
+            window.title = "Pomodoro Timer · Calendar & History"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: WorkspaceView(model: model, navigation: navigation))
             window.appearance = NSAppearance(named: .aqua)
@@ -118,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showSettings() {
         guard let model else { return }
         if settingsWindow == nil {
-            settingsWindow = compactWindow(title: "工作与休息 · 设置", size: NSSize(width: 480, height: 520),
+            settingsWindow = compactWindow(title: "Pomodoro Timer · Settings", size: NSSize(width: 480, height: 520),
                                            miniaturizable: false, content: SettingsView(model: model))
         }
         present(settingsWindow)
@@ -191,20 +192,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let main = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        for (title, action, key) in [("打开计时器", #selector(showMain), "0"),
-                                     ("日历与记录…", #selector(showCalendar), "1"),
-                                     ("设置…", #selector(showSettings), ",")] {
+        for (title, action, key) in [("Open Timer", #selector(showMain), "0"),
+                                     ("Calendar & History…", #selector(showCalendar), "1"),
+                                     ("Settings…", #selector(showSettings), ",")] {
             let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
             entry.target = self
             appMenu.addItem(entry)
         }
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出工作与休息", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Pomodoro Timer", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
-        let editItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
-        let editMenu = NSMenu(title: "编辑")
-        for (title, selector, key) in [("撤销", "undo:", "z"), ("剪切", "cut:", "x"), ("复制", "copy:", "c"), ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")] {
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: "Edit")
+        for (title, selector, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
             editMenu.addItem(withTitle: title, action: Selector(selector), keyEquivalent: key)
         }
         editItem.submenu = editMenu
@@ -245,9 +246,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func update() {
         guard let model, let button = statusItem?.button else { return }
-        button.title = model.showsMenuBarTimer ? " \(model.isBlocked ? "已暂停" : model.readout.text)" : ""
+        button.title = model.showsMenuBarTimer ? " \(model.isBlocked ? "Paused" : model.readout.text)" : ""
         button.toolTip = "\(model.phaseTitle) · \(model.readout.text)\n\(model.detail)"
-        button.setAccessibilityLabel("工作与休息，\(model.phaseTitle)")
+        button.setAccessibilityLabel("Pomodoro Timer, \(model.phaseTitle)")
         button.setAccessibilityValue(model.readout.text)
         let progress = model.readout.progress
         let color = NSColor(model.tint)

@@ -58,7 +58,7 @@ if (arguments.first == "--press" && arguments.count == 2) ||
         guard let status = find("pomodoro.status", in: searchRoot, identifier: true) else { fatalError("Status button not found") }
         control = status
     } else {
-        let title = arguments.count == 3 ? arguments[1] : "工作与休息"
+        let title = arguments.count == 3 ? arguments[1] : "Pomodoro Timer"
         let label = arguments.last!
         let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
         guard let target = windows.first(where: { attribute($0, kAXTitleAttribute) as? String == title }),

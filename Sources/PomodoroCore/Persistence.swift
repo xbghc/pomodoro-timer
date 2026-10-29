@@ -37,7 +37,7 @@ public final class JSONActivityStore: ActivityStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .millisecondsSince1970
         do { return try decoder.decode(ActivitySnapshot.self, from: Data(contentsOf: snapshotURL)).validated() }
-        catch { throw ValidationError("无法读取 activities.json：\(error.localizedDescription) 原文件已保留。") }
+        catch { throw ValidationError("Unable to read activities.json: \(UserFacingError.message(error)) The original file has been preserved.") }
     }
 
     public func saveSnapshot(_ snapshot: ActivitySnapshot) throws {
@@ -98,7 +98,7 @@ public final class ActivitySession {
     private func persist(_ candidate: ActivityEngine, at now: Date) throws {
         do { try store.saveSnapshot(candidate.snapshot) }
         catch {
-            persistenceFailure = "保存失败，已暂停记录，避免丢失或重复数据：\(error.localizedDescription)"
+            persistenceFailure = "Unable to save. Tracking has been paused to protect your records. \(UserFacingError.message(error))"
             throw ValidationError(persistenceFailure!)
         }
         engine = candidate

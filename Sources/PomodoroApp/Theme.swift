@@ -1,4 +1,5 @@
 import SwiftUI
+import PomodoroCore
 
 /// Colors and typography follow the supplied compact macOS reference.
 enum PomodoroTheme {
@@ -20,6 +21,7 @@ struct SurfaceDivider: View {
 struct SurfaceAppearance: ViewModifier {
     func body(content: Content) -> some View {
         content
+            .environment(\.locale, EnglishFormat.locale)
             .font(.system(size: 13))
             .foregroundStyle(PomodoroTheme.ink)
             .tint(PomodoroTheme.work)

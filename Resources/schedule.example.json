@@ -1,22 +1,22 @@
 {
   "workMinutes": 30,
   "breakMinutes": 5,
-  "defaultTemplate": "常规日",
+  "defaultTemplate": "Regular day",
   "weekdays": {
-    "0": "常规日",
-    "1": "常规日",
-    "2": "常规日",
-    "3": "常规日",
-    "4": "常规日",
-    "5": "常规日",
-    "6": "常规日"
+    "0": "Regular day",
+    "1": "Regular day",
+    "2": "Regular day",
+    "3": "Regular day",
+    "4": "Regular day",
+    "5": "Regular day",
+    "6": "Regular day"
   },
   "templates": {
-    "常规日": [
+    "Regular day": [
       { "start": "10:00", "end": "12:10" },
       { "start": "13:30", "end": "18:10" },
       { "start": "19:30", "end": "22:30" }
     ],
-    "无固定时段": []
+    "No fixed hours": []
   }
 }

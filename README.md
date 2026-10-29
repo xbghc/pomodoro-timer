@@ -1,12 +1,14 @@
-# 工作与休息 · macOS 原生番茄钟
+# Pomodoro Timer · macOS 原生番茄钟
 
 一个动态工作日程表：工作、休息、等待分开记录。SwiftUI 界面，AppKit 原生桌边抽屉，纯 Swift 领域层；只面向 macOS，不依赖 Electron、Flutter 或 WebView。
+
+应用界面统一使用英文，包括菜单、提醒、错误和无障碍标签；日期使用英文，时刻采用 24 小时制，仍按本地时区执行日程。旧版内置模板会显示英文名称，已有配置标识与历史记录保持有效，自定义名称按用户输入保留。
 
 鼠标蹭到桌面右缘，小窗像抽屉一样展开。提醒不抢键盘焦点；你决定何时休息。休息结束后等你手动恢复，等待时间不计入统计。
 
 ## 运行与构建
 
-安装包见 [GitHub Releases](https://github.com/xbghc/pomodoro-timer/releases)：按处理器选择 `macos-arm64.zip`（Apple Silicon）或 `macos-x86_64.zip`（Intel），解压后将 `PomodoroTimer.app` 放入“应用程序”。安装包为 ad-hoc 签名、未经 Apple 公证；下载、校验和与首次打开说明见 [v2.1.0 发布说明](docs/releases/v2.1.0.md)。
+安装包见 [GitHub Releases](https://github.com/xbghc/pomodoro-timer/releases)：按处理器选择 `macos-arm64.zip`（Apple Silicon）或 `macos-x86_64.zip`（Intel），解压后将 `PomodoroTimer.app` 放入“应用程序”。安装包为 ad-hoc 签名、未经 Apple 公证；下载、校验和与首次打开说明见 [v2.1.1 发布说明](docs/releases/v2.1.1.md)。
 
 应用最低运行系统为 **macOS 13.0**。源码最低工具链为 **Swift 6.0 / Xcode 16.0**，采用 Swift 6 严格并发语言模式；Xcode 16.0 开发机要求 **macOS 14.5+**，与应用运行下限不同。没有第三方包依赖。
 
@@ -24,7 +26,7 @@ open dist/PomodoroTimer.app
 ## 使用
 
 - 默认工作 30 分钟后温和提醒，休息 5 分钟；可以提前休息或使用临时时长。提醒后仍继续记录工作，不自动切换状态。
-- “再专注 1 小时”从点击时刻重设下一提醒，不重置累计时间、不拆记录。例如 10:00 开始、10:20 延长、11:20 休息，记为一条 80 分钟工作记录。
+- “Focus for 1 Hour”从点击时刻重设下一提醒，不重置累计时间、不拆记录。例如 10:00 开始、10:20 延长、11:20 休息，记为一条 80 分钟工作记录。
 - 固定时段自动开始/停止，固定截止优先于延长提醒。中途打开只从启动时刻开始记录。
 - 休息结束进入等待，手动开始才记录工作；下一个固定起点仍按日程接管。
 - 计时小窗与桌边抽屉采用 360×190 布局：大数字倒计时、底部进度线，工作为珊瑚红、休息为绿色。工作提醒后显示 `+` 超时量，仍继续记录工作。
@@ -35,7 +37,7 @@ open dist/PomodoroTimer.app
 
 ## JSON 工作模板
 
-在设置窗口或“日历与记录”的“工作模板”页点“打开 JSON”，外部编辑后“重新加载”。未来计划与默认时长仅通过 JSON 修改。应用内的模板选择只作用于**今天**，不修改 JSON 或未来日期。
+在 Settings 窗口或 Calendar & History 的 Schedule 页点 Open JSON，外部编辑后点 Reload。未来计划与默认时长仅通过 JSON 修改。应用内的模板选择只作用于**今天**，不修改 JSON 或未来日期。
 
 [示例配置](Resources/schedule.example.json) 的常规时段是 10:00–12:10、13:30–18:10、19:30–22:30。星期 `0` 为周日、`6` 为周六，未指定的星期使用 `defaultTemplate`。初始映射是可编辑示例，没有擅自确定工作日、周末或特殊周五安排。
 
@@ -43,15 +45,15 @@ open dist/PomodoroTimer.app
 {
   "workMinutes": 30,
   "breakMinutes": 5,
-  "defaultTemplate": "常规日",
-  "weekdays": { "0": "常规日", "1": "常规日", "2": "常规日", "3": "常规日", "4": "常规日", "5": "常规日", "6": "常规日" },
+  "defaultTemplate": "Regular day",
+  "weekdays": { "0": "Regular day", "1": "Regular day", "2": "Regular day", "3": "Regular day", "4": "Regular day", "5": "Regular day", "6": "Regular day" },
   "templates": {
-    "常规日": [
+    "Regular day": [
       { "start": "10:00", "end": "12:10" },
       { "start": "13:30", "end": "18:10" },
       { "start": "19:30", "end": "22:30" }
     ],
-    "无固定时段": []
+    "No fixed hours": []
   }
 }
 ```

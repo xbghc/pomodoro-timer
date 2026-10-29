@@ -41,15 +41,15 @@ archives=("PomodoroTimer-$version-macos-arm64.zip" "PomodoroTimer-$version-macos
 cp "$notes" "$verification_dir/notes.md"
 cat >> "$verification_dir/notes.md" <<EOF
 
-构建提交：\`$GITHUB_SHA\`
+Build commit: \`$GITHUB_SHA\`
 
-发布构建与校验：[GitHub Actions](https://github.com/$GH_REPO/actions/runs/$GITHUB_RUN_ID)。
+Release build and verification: [GitHub Actions](https://github.com/$GH_REPO/actions/runs/$GITHUB_RUN_ID).
 EOF
 
 # A failed upload/download leaves a draft for inspection, never a partial public release.
 gh release create "$tag" "$asset_dir/${archives[0]}" "$asset_dir/${archives[1]}" "$asset_dir/SHA256SUMS" \
   --repo "$GH_REPO" --draft --verify-tag --target "$GITHUB_SHA" \
-  --title "$tag · 工作与休息（macOS）" --notes-file "$verification_dir/notes.md"
+  --title "$tag · Pomodoro Timer (macOS)" --notes-file "$verification_dir/notes.md"
 gh release view "$tag" --repo "$GH_REPO" --json tagName,isDraft,assets > "$verification_dir/release.json"
 python3 - "$verification_dir/release.json" "$tag" "${archives[@]}" <<'PY'
 import json, sys

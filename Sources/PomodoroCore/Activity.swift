@@ -2,7 +2,7 @@ import Foundation
 
 public enum ActivityKind: String, Codable, CaseIterable, Hashable, Sendable {
     case work, rest
-    public var title: String { self == .work ? "工作" : "休息" }
+    public var title: String { self == .work ? "Work" : "Break" }
 }
 
 public enum RecordOrigin: String, Codable, Sendable { case timer, manual }
@@ -60,37 +60,37 @@ public struct ActivitySnapshot: Codable, Equatable, Sendable {
     public init() {}
 
     public func validated() throws -> Self {
-        guard formatVersion == 1 else { throw ValidationError("无法识别活动数据格式；原文件未改动。") }
+        guard formatVersion == 1 else { throw ValidationError("Unsupported activity data format. The original file has not been changed.") }
         try RecordValidation.validate(records)
         let runtime = runtime
         let dates = [runtime.reminderAt, runtime.restEndsAt, runtime.fixedEnd,
                      runtime.lastObservedAt, runtime.clockBlockedUntil].compactMap { $0 }
         guard dates.allSatisfy(SupportedDate.contains) else {
-            throw ValidationError("运行检查点包含无效时间。")
+            throw ValidationError("The saved checkpoint contains an invalid date.")
         }
         if let active = runtime.active {
             guard SupportedDate.contains(active.start),
                   let observed = runtime.lastObservedAt, observed >= active.start,
                   !records.contains(where: { $0.id == active.id || $0.end > active.start }),
                   !runtime.suspended, runtime.clockBlockedUntil == nil else {
-                throw ValidationError("运行检查点与历史记录冲突；未覆盖原文件。")
+                throw ValidationError("The saved checkpoint conflicts with history. The original file has not been overwritten.")
             }
             guard (active.kind == .work && runtime.reminderAt != nil && runtime.restEndsAt == nil) ||
                   (active.kind == .rest && runtime.restEndsAt != nil && runtime.reminderAt == nil),
                   runtime.fixedEnd.map({ $0 > observed }) ?? true,
                   runtime.restEndsAt.map({ $0 > observed }) ?? true,
                   runtime.reminderAt.map({ $0 >= active.start }) ?? true else {
-                throw ValidationError("活动检查点缺少正确的提醒或结束时间。")
+                throw ValidationError("The activity checkpoint is missing a valid reminder or end time.")
             }
             if active.kind == .work, let reminder = runtime.reminderAt,
                runtime.reminderDelivered != (reminder <= observed) {
-                throw ValidationError("工作提醒标记与检查点时间不一致。")
+                throw ValidationError("The work reminder flag does not match the checkpoint time.")
             }
             if active.kind == .rest, runtime.reminderDelivered {
-                throw ValidationError("休息检查点不能保留工作提醒标记。")
+                throw ValidationError("A break checkpoint cannot contain a work reminder flag.")
             }
         } else if runtime.reminderAt != nil || runtime.restEndsAt != nil || runtime.fixedEnd != nil || runtime.reminderDelivered {
-            throw ValidationError("等待状态不能含有活动截止时间。")
+            throw ValidationError("An idle checkpoint cannot contain activity deadlines.")
         }
         return self
     }
@@ -102,12 +102,12 @@ public enum RecordValidation {
         var previousEnd: Date?
         for record in records.sorted(by: { $0.start < $1.start }) {
             guard SupportedDate.contains(record.start), SupportedDate.contains(record.end),
-                  record.start < record.end else { throw ValidationError("记录的开始时间必须早于结束时间。") }
-            guard ids.insert(record.id).inserted else { throw ValidationError("记录 ID 重复。") }
-            if let now, record.end > now { throw ValidationError("只能记录已经发生的工作或休息，不能添加未来记录。") }
-            if let previousEnd, record.start < previousEnd { throw ValidationError("实际记录不能互相重叠；相邻记录可以共用边界。") }
+                  record.start < record.end else { throw ValidationError("The start time must be earlier than the end time.") }
+            guard ids.insert(record.id).inserted else { throw ValidationError("Duplicate record ID.") }
+            if let now, record.end > now { throw ValidationError("Records must be in the past. Future work or breaks cannot be added.") }
+            if let previousEnd, record.start < previousEnd { throw ValidationError("Records cannot overlap. Adjacent records may share a boundary.") }
             if let active, record.id == active.id || record.end > active.start {
-                throw ValidationError("记录与正在进行的活动冲突，请先结束当前活动。")
+                throw ValidationError("This record overlaps the active session. End that session first.")
             }
             previousEnd = record.end
         }

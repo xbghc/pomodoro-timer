@@ -28,7 +28,7 @@ struct CompactTimerView: View {
                         Button(action: collapse) { Image(systemName: "chevron.right").frame(width: 44, height: 40) }
                             .buttonStyle(.plain)
                             .foregroundStyle(PomodoroTheme.secondary)
-                            .help("收起抽屉").accessibilityLabel("收起抽屉")
+                            .help("Collapse drawer").accessibilityLabel("Collapse drawer")
                     }
                     Spacer()
                     Button { model.openSettings?() } label: {
@@ -37,7 +37,7 @@ struct CompactTimerView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(PomodoroTheme.secondary)
-                    .help("设置…（⌘,）").accessibilityLabel("设置")
+                    .help("Settings… (⌘,)").accessibilityLabel("Settings")
                 }.padding(.horizontal, 4)
             }.frame(height: 40)
 
@@ -64,13 +64,13 @@ struct CompactTimerView: View {
         .modifier(SurfaceAppearance())
         .contextMenu {
             if model.active?.kind == .work {
-                Button("休息 \(model.configuration.breakMinutes) 分钟") { model.startRest() }.disabled(model.isBlocked)
-                Button("再专注 1 小时") { model.deferReminder() }.disabled(model.isBlocked)
+                Button("Take a \(model.configuration.breakMinutes) min break") { model.startRest() }.disabled(model.isBlocked)
+                Button("Focus for 1 Hour") { model.deferReminder() }.disabled(model.isBlocked)
                 Divider()
             }
-            Button("日历与记录…") { model.openCalendar?() }
-            Button("临时时长…") { model.openActivity?() }
-            Button("设置…") { model.openSettings?() }
+            Button("Calendar & History…") { model.openCalendar?() }
+            Button("Custom duration…") { model.openActivity?() }
+            Button("Settings…") { model.openSettings?() }
         }
     }
 }
@@ -81,9 +81,9 @@ struct TimerDigits: View {
     let size: CGFloat
 
     private var description: String {
-        if !model.isReady { return "计时不可用，请查看错误详情" }
-        let meaning = model.active == nil ? "下一次工作" : (model.readout.isOvertime ? "超出提醒" : "剩余")
-        return "\(model.phaseTitle)，\(meaning) \(model.readout.text)"
+        if !model.isReady { return "Timer unavailable. Show error details." }
+        let meaning = model.active == nil ? "Next work session" : (model.readout.isOvertime ? "Past reminder" : "Remaining")
+        return "\(model.phaseTitle), \(meaning) \(model.readout.text)"
     }
 
     var body: some View {
@@ -107,7 +107,7 @@ struct TimerCaption: View {
         Group {
             if model.isBlocked || model.errorMessage != nil {
                 Button { model.openActivity?() } label: {
-                    Label("\(model.isBlocked ? "已暂停" : "操作失败") · 查看详情", systemImage: "exclamationmark.circle")
+                    Label("\(model.isBlocked ? "Paused" : "Error") · Show details", systemImage: "exclamationmark.circle")
                 }.buttonStyle(.plain).foregroundStyle(PomodoroTheme.work)
                     .help(model.blockingError ?? model.errorMessage ?? model.detail)
             } else {
@@ -134,8 +134,8 @@ struct PhaseIndicators: View {
         }
         .frame(width: 29, height: 5)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("工作、休息、等待；当前\(model.phaseTitle)")
-        .help("工作 · 休息 · 等待：当前\(model.phaseTitle)")
+        .accessibilityLabel("Work, Break, Idle; current: \(model.phaseTitle)")
+        .help("Work · Break · Idle; current: \(model.phaseTitle)")
     }
 }
 
@@ -147,13 +147,13 @@ struct TimerActions: View {
     var spacing: CGFloat = 20
 
     private var nextLabel: String {
-        model.active?.kind == .rest ? "结束休息并开始工作" : "休息 \(model.configuration.breakMinutes) 分钟"
+        model.active?.kind == .rest ? "End break and start work" : "Take a \(model.configuration.breakMinutes) min break"
     }
 
     var body: some View {
         HStack(spacing: spacing) {
             RoundTimerButton(symbol: model.active == nil ? "play.fill" : "stop.fill",
-                             label: model.active == nil ? "开始工作" : "结束当前活动",
+                             label: model.active == nil ? "Start work" : "End activity",
                              size: size, fill: model.tint, foreground: .white) {
                 if model.active == nil { model.startWork() } else { model.stop() }
             }

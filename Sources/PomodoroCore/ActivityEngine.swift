@@ -122,7 +122,7 @@ public struct ActivityEngine {
         try validateDuration(duration, maximum: 240)
         let events = try tick(at: now)
         try requireAvailable()
-        guard active?.kind != .rest else { throw ValidationError("已经在休息。") }
+        guard active?.kind != .rest else { throw ValidationError("A break is already in progress.") }
         close(at: now)
         begin(.rest, at: now, minutes: duration, fixedEnd: currentBlock(at: now)?.end)
         return relevantEvents(events)
@@ -132,7 +132,7 @@ public struct ActivityEngine {
         try validateDuration(minutes, maximum: 480)
         let events = try tick(at: now)
         try requireAvailable()
-        guard active?.kind == .work else { throw ValidationError("只有工作中才能调整下一次休息提醒。") }
+        guard active?.kind == .work else { throw ValidationError("Break reminders can only be adjusted during work.") }
         snapshot.runtime.reminderAt = now.addingTimeInterval(TimeInterval(minutes * 60))
         snapshot.runtime.reminderDelivered = false
         return events.filter { $0 != .workReminder }
@@ -154,7 +154,7 @@ public struct ActivityEngine {
     }
 
     @discardableResult public mutating func selectTemplate(_ name: String?, at now: Date) throws -> [TimerEvent] {
-        if let name, configuration.templates[name] == nil { throw ValidationError("没有找到模板「\(name)」。") }
+        if let name, configuration.templates[name] == nil { throw ValidationError("Template '\(name)' was not found.") }
         var events = try tick(at: now)
         try requireAvailable()
         let before = currentBlock(at: now)
@@ -190,7 +190,7 @@ public struct ActivityEngine {
     @discardableResult public mutating func deleteRecord(id: UUID, at now: Date) throws -> [TimerEvent] {
         let events = try tick(at: now)
         try requireAvailable()
-        guard snapshot.records.contains(where: { $0.id == id }) else { throw ValidationError("记录不存在。") }
+        guard snapshot.records.contains(where: { $0.id == id }) else { throw ValidationError("This record no longer exists.") }
         snapshot.records.removeAll { $0.id == id }
         return events
     }
@@ -252,14 +252,14 @@ public struct ActivityEngine {
     }
 
     private func requireAvailable() throws {
-        guard !snapshot.runtime.suspended else { throw ValidationError("系统已暂停记录，请唤醒后再操作。") }
-        guard snapshot.runtime.clockBlockedUntil == nil else { throw ValidationError("系统时间早于已记录时间，已安全暂停。请校正系统时间。") }
+        guard !snapshot.runtime.suspended else { throw ValidationError("Tracking is suspended. Wake the system before continuing.") }
+        guard snapshot.runtime.clockBlockedUntil == nil else { throw ValidationError("The system clock is earlier than the recorded time. Tracking is paused. Correct your clock settings.") }
     }
     private func validateTime(_ date: Date) throws {
-        guard SupportedDate.contains(date) else { throw ValidationError("时钟返回了无效或超出支持日历范围的时间。") }
+        guard SupportedDate.contains(date) else { throw ValidationError("The clock returned an invalid or unsupported date.") }
     }
     private func validateDuration(_ minutes: Int, maximum: Int) throws {
-        guard (1...maximum).contains(minutes) else { throw ValidationError("时长必须是 1–\(maximum) 分钟。") }
+        guard (1...maximum).contains(minutes) else { throw ValidationError("Duration must be between 1 and \(maximum) minutes.") }
     }
     private func earliest(_ date: Date, _ others: Date?...) -> Date { ([date] + others.compactMap { $0 }).min()! }
     private func earliestOptional(_ dates: Date?...) -> Date? { dates.compactMap { $0 }.min() }

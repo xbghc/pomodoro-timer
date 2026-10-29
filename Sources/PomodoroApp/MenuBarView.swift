@@ -20,12 +20,12 @@ struct MenuBarView: View {
             SurfaceDivider().padding(.horizontal, 8)
             VStack(spacing: 0) {
                 if model.active?.kind == .work {
-                    MenuRow("再专注 1 小时", action: { model.deferReminder() }).disabled(model.isBlocked)
+                    MenuRow("Focus for 1 Hour", action: { model.deferReminder() }).disabled(model.isBlocked)
                 }
-                MenuRow("打开计时器", shortcut: "⌘0", action: showTimer)
-                MenuRow("日历与记录…", shortcut: "⌘1", action: showCalendar)
-                MenuRow("设置…", shortcut: "⌘,", action: showSettings)
-                MenuRow("退出", shortcut: "⌘Q", action: quit)
+                MenuRow("Open Timer", shortcut: "⌘0", action: showTimer)
+                MenuRow("Calendar & History…", shortcut: "⌘1", action: showCalendar)
+                MenuRow("Settings…", shortcut: "⌘,", action: showSettings)
+                MenuRow("Quit", shortcut: "⌘Q", action: quit)
             }.padding(.vertical, 4)
         }
         .padding(6)

@@ -40,8 +40,8 @@ final class AppModel: ObservableObject {
     var active: ActiveActivity? { snapshot.runtime.active }
     var isBlocked: Bool { !isReady || blockingError != nil || snapshot.runtime.clockBlockedUntil != nil || snapshot.runtime.suspended }
     var phaseTitle: String {
-        if isBlocked { return "已暂停" }
-        return active?.kind.title ?? "等待"
+        if isBlocked { return "Paused" }
+        return active?.kind.title ?? "Idle"
     }
     var tint: Color {
         if isBlocked { return .orange }
@@ -52,11 +52,11 @@ final class AppModel: ObservableObject {
                      now: observedNow, restDeadline: session?.engine.restDeadline)
     }
     var timerCaption: String {
-        if isBlocked { return "已暂停 · 查看详情" }
-        if isReminderDue { return "该休息了 · 工作仍在记录" }
-        if active?.kind == .work { return "专注中 · 已工作 \(Self.duration(elapsed))" }
-        if active?.kind == .rest { return "休息中 · 结束后等待" }
-        return "等待 · 准备好再开始"
+        if isBlocked { return "Paused · Show details" }
+        if isReminderDue { return "Break due · still tracking" }
+        if active?.kind == .work { return "Focus · \(Self.duration(elapsed)) elapsed" }
+        if active?.kind == .rest { return "Break · restart when ready" }
+        return "Ready when you are"
     }
     var isReminderDue: Bool { active?.kind == .work && snapshot.runtime.reminderDelivered }
     var observedNow: Date {
@@ -70,19 +70,19 @@ final class AppModel: ObservableObject {
     var detail: String {
         if let blockingError { return blockingError }
         if let until = snapshot.runtime.clockBlockedUntil {
-            return "系统时间回退，暂停至 \(until.formatted(date: .abbreviated, time: .standard))。请校正系统时间。"
+            return "The system clock moved backward. Tracking is paused until \(Self.dateTime(until, includeSeconds: true)). Check your clock settings."
         }
-        if isReminderDue { return "该休息了，手头的事可以从容收尾。" }
+        if isReminderDue { return "Time for a break. Wrap up when you are ready." }
         if active?.kind == .work, let reminder = snapshot.runtime.reminderAt {
-            if let end = snapshot.runtime.fixedEnd, end <= reminder { return "本时段于 \(Self.time(end)) 结束" }
-            return "\(Self.time(reminder)) 提醒休息"
+            if let end = snapshot.runtime.fixedEnd, end <= reminder { return "This work block ends at \(Self.time(end))." }
+            return "Break reminder at \(Self.time(reminder))."
         }
-        if active?.kind == .rest { return "休息结束后，准备好再手动开始。" }
+        if active?.kind == .rest { return "When the break ends, start work again when you are ready." }
         if let message = reminderMessage { return message }
         if let next = ScheduleResolver().nextBlock(after: now, configuration: configuration, selection: snapshot.selection) {
-            return "下个工作时段 \(next.start.formatted(date: .abbreviated, time: .shortened))"
+            return "Next work block: \(AppModel.dateTime(next.start))"
         }
-        return "准备好时，开始一段工作。"
+        return "Start a work session when you are ready."
     }
 
     func load() {
@@ -96,7 +96,7 @@ final class AppModel: ObservableObject {
         } catch {
             session = nil
             isReady = false
-            blockingError = error.localizedDescription
+            blockingError = UserFacingError.message(error)
         }
         onChange?()
     }
@@ -137,7 +137,7 @@ final class AppModel: ObservableObject {
     }
     func openJSON() {
         let url = directory.appendingPathComponent("schedule.json")
-        if !NSWorkspace.shared.open(url) { errorMessage = "无法打开 JSON 文件：\(url.path)" }
+        if !NSWorkspace.shared.open(url) { errorMessage = "Unable to open the JSON file: \(url.path)" }
     }
     func showDataFolder() { NSWorkspace.shared.open(directory) }
 
@@ -178,25 +178,28 @@ final class AppModel: ObservableObject {
     }
     private func report(_ error: Error) {
         if let failure = session?.persistenceFailure { blockingError = failure }
-        else { errorMessage = error.localizedDescription }
+        else { errorMessage = UserFacingError.message(error) }
         refresh()
     }
     private func handle(_ events: [TimerEvent]) {
         for event in events {
             let text: String
             switch event {
-            case .workReminder: text = "该休息了，准备好时再开始休息。"
-            case .restFinished: text = "休息结束，准备好后手动开始工作。"
-            case .scheduledWorkStarted: text = "工作时段开始。"
-            case .scheduledBlockEnded: text = "本次工作时段结束。"
-            case .clockMovedBackward: text = "系统时间回退，记录已安全暂停。"
+            case .workReminder: text = "Break due. Take it when ready."
+            case .restFinished: text = "Break finished. Start when ready."
+            case .scheduledWorkStarted: text = "Scheduled work started."
+            case .scheduledBlockEnded: text = "Work block finished."
+            case .clockMovedBackward: text = "Clock changed. Tracking paused."
             }
             reminderMessage = text
             onReminder?(text)
         }
     }
 
-    static func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }
+    static func time(_ date: Date) -> String { EnglishFormat.time(date) }
+    static func dateTime(_ date: Date, includeSeconds: Bool = false) -> String {
+        EnglishFormat.dateTime(date, includeSeconds: includeSeconds)
+    }
     static func duration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         if total >= 3600 { return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60) }
@@ -204,6 +207,6 @@ final class AppModel: ObservableObject {
     }
     static func minutes(_ seconds: TimeInterval) -> String {
         let minutes = max(0, Int(seconds / 60))
-        return minutes >= 60 ? "\(minutes / 60) 小时 \(minutes % 60) 分" : "\(minutes) 分钟"
+        return minutes >= 60 ? "\(minutes / 60) hr \(minutes % 60) min" : "\(minutes) min"
     }
 }

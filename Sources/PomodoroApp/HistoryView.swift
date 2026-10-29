@@ -19,26 +19,26 @@ struct HistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Button { move(-1) } label: { Image(systemName: "chevron.left") }.help("前一天")
-                DatePicker("日期", selection: $day, in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
+                Button { move(-1) } label: { Image(systemName: "chevron.left") }.help("Previous day")
+                DatePicker("Date", selection: $day, in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
                     .labelsHidden().frame(width: 160)
-                Button { move(1) } label: { Image(systemName: "chevron.right") }.help("后一天")
-                Button("今天") { day = calendar.startOfDay(for: model.now) }
+                Button { move(1) } label: { Image(systemName: "chevron.right") }.help("Next day")
+                Button("Today") { day = calendar.startOfDay(for: model.now) }
                 Spacer()
-                Button { addRecord() } label: { Label("补录实际记录", systemImage: "plus") }
+                Button { addRecord() } label: { Label("Add Record", systemImage: "plus") }
                     .disabled(model.isBlocked || dayInterval.start > model.now)
             }
             HStack(spacing: 24) {
-                Text("实际工作  \(AppModel.minutes(model.summary(for: day).work))").foregroundStyle(PomodoroTheme.work)
-                Text("实际休息  \(AppModel.minutes(model.summary(for: day).rest))").foregroundStyle(PomodoroTheme.rest)
+                Text("Work  \(AppModel.minutes(model.summary(for: day).work))").foregroundStyle(PomodoroTheme.work)
+                Text("Break  \(AppModel.minutes(model.summary(for: day).rest))").foregroundStyle(PomodoroTheme.rest)
                 Spacer()
-                Text("等待不计入统计").font(.caption).foregroundStyle(.secondary)
+                Text("Idle time is not counted").font(.caption).foregroundStyle(.secondary)
             }.font(.callout)
             Divider()
             HStack {
-                Text("时间").frame(width: 48, alignment: .leading)
-                Text("计划 · 只读").frame(maxWidth: .infinity, alignment: .leading)
-                Text("实际 · 点击编辑").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Time").frame(width: 48, alignment: .leading)
+                Text("Planned · read only").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Tracked · click to edit").frame(maxWidth: .infinity, alignment: .leading)
             }.font(.caption).foregroundStyle(.secondary)
             ScrollViewReader { proxy in
                 ScrollView {
@@ -46,17 +46,17 @@ struct HistoryView: View {
                     recordList.padding(.top, 18)
                 }.onAppear { proxy.scrollTo(8, anchor: .top) }
             }
-            Text("计划按当前 JSON 展示，仅实际记录参与统计。只能补录已经发生且不重叠的时间。")
+            Text("Plans use the current schedule. Only tracked time counts. Records must be in the past and must not overlap.")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(20)
         .sheet(item: $editing) { RecordEditor(model: model, record: $0) }
-        .alert("删除这条实际记录？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("取消", role: .cancel) { deleting = nil }
-            Button("删除", role: .destructive) {
+        .alert("Delete this record?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Cancel", role: .cancel) { deleting = nil }
+            Button("Delete", role: .destructive) {
                 if let deleting { model.delete(deleting) }
                 deleting = nil
             }
-        } message: { Text("删除后当日统计会随之更新。") }
+        } message: { Text("Your daily totals will be updated.") }
     }
 
     private var timeline: some View {
@@ -76,9 +76,9 @@ struct HistoryView: View {
                 }
                 ForEach(planned) { block in
                     intervalView(start: block.start, end: block.end, width: column - 10,
-                                 color: .secondary, label: "工作计划", planned: true)
+                                 color: .secondary, label: "Planned work", planned: true)
                         .offset(x: 56, y: offset(block.start))
-                        .accessibilityLabel("只读计划，\(AppModel.time(block.start)) 至 \(AppModel.time(block.end))")
+                        .accessibilityLabel("Planned work, read only, \(AppModel.time(block.start)) to \(AppModel.time(block.end))")
                 }
                 ForEach(records) { record in
                     Button { editing = record } label: {
@@ -86,11 +86,11 @@ struct HistoryView: View {
                                      color: record.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest, label: record.kind.title)
                     }.buttonStyle(.plain).disabled(model.isBlocked)
                         .offset(x: 56 + column, y: offset(record.start))
-                        .accessibilityLabel("编辑\(record.kind.title)，\(AppModel.time(record.start)) 至 \(AppModel.time(record.end))")
+                        .accessibilityLabel("Edit \(record.kind.title), \(AppModel.time(record.start)) to \(AppModel.time(record.end))")
                 }
                 if let active = model.active, active.start < dayInterval.end, model.observedNow > dayInterval.start {
                     intervalView(start: active.start, end: model.observedNow, width: column - 10,
-                                 color: active.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest, label: "\(active.kind.title) · 进行中")
+                                 color: active.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest, label: "\(active.kind.title) · in progress")
                         .offset(x: 56 + column, y: offset(active.start))
                 }
             }
@@ -120,8 +120,8 @@ struct HistoryView: View {
 
     private var recordList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("实际记录").font(.headline)
-            if records.isEmpty { Text("这一天还没有已结束的记录。").foregroundStyle(.secondary) }
+            Text("Tracked sessions").font(.headline)
+            if records.isEmpty { Text("No completed sessions on this day.").foregroundStyle(.secondary) }
             ForEach(records) { record in
                 HStack {
                     Circle().fill(record.kind == .work ? PomodoroTheme.work : PomodoroTheme.rest).frame(width: 7, height: 7)
@@ -129,8 +129,8 @@ struct HistoryView: View {
                     Text("\(AppModel.time(record.start)) – \(AppModel.time(record.end))").monospacedDigit()
                     Spacer()
                     Text(AppModel.minutes(record.duration)).foregroundStyle(.secondary)
-                    Button("编辑") { editing = record }
-                    Button("删除", role: .destructive) { deleting = record }
+                    Button("Edit") { editing = record }
+                    Button("Delete", role: .destructive) { deleting = record }
                 }.font(.callout).disabled(model.isBlocked)
             }
         }
@@ -142,7 +142,7 @@ struct HistoryView: View {
     private func addRecord() {
         let end = min(model.now, dayInterval.end, model.active?.start ?? model.now)
         guard end > dayInterval.start else {
-            model.errorMessage = "这一天的可补录时间与当前活动冲突，请先结束当前活动，或选择其他日期。"
+            model.errorMessage = "This day overlaps your active session. End the session first, or choose another day."
             return
         }
         let suggested = min(dayInterval.start.addingTimeInterval(9 * 3600), end.addingTimeInterval(-1800))
@@ -159,21 +159,21 @@ private struct RecordEditor: View {
     @State private var error: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("实际活动记录").font(.title2)
-            Picker("类型", selection: $record.kind) {
+            Text("Activity Record").font(.title2)
+            Picker("Type", selection: $record.kind) {
                 ForEach(ActivityKind.allCases, id: \.self) { Text($0.title).tag($0) }
             }.pickerStyle(.segmented)
-            DatePicker("开始", selection: $record.start, displayedComponents: [.date, .hourAndMinute])
-            DatePicker("结束", selection: $record.end, displayedComponents: [.date, .hourAndMinute])
-            Text("未改动的时间保留原有秒和毫秒。未来或重叠记录无法保存。")
+            DatePicker("Start", selection: $record.start, displayedComponents: [.date, .hourAndMinute])
+            DatePicker("End", selection: $record.end, displayedComponents: [.date, .hourAndMinute])
+            Text("Unchanged times keep their seconds and milliseconds. Future or overlapping records cannot be saved.")
                 .font(.caption).foregroundStyle(.secondary)
             if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存") {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
                     if model.save(record) { dismiss() }
-                    else { error = model.blockingError ?? model.errorMessage ?? "无法保存记录。" }
+                    else { error = model.blockingError ?? model.errorMessage ?? "Unable to save this record." }
                 }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(model.isBlocked)
             }
         }.padding(24).frame(width: 440).modifier(SurfaceAppearance())

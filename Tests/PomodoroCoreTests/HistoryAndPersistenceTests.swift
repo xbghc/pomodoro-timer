@@ -58,7 +58,7 @@ final class HistoryAndPersistenceTests: XCTestCase {
         let saved = store.snapshot
         let writes = store.saves
         XCTAssertThrowsError(try session.reloadConfiguration())
-        XCTAssertThrowsError(try session.perform { try $0.selectTemplate("无固定时段", at: $1) })
+        XCTAssertThrowsError(try session.perform { try $0.selectTemplate("No fixed hours", at: $1) })
         let record = ActivityRecord(kind: .work, start: time("08:00"), end: time("09:00"))
         XCTAssertThrowsError(try session.perform { try $0.upsertRecord(record, at: $1) })
         XCTAssertEqual(store.snapshot, saved)

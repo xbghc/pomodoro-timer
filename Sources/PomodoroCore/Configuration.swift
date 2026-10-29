@@ -45,38 +45,55 @@ public struct ScheduleConfiguration: Codable, Equatable, Sendable {
 
     /// An editable example, not an assertion about the user's weekday/weekend preferences.
     public static let example = ScheduleConfiguration(
-        defaultTemplate: "常规日",
-        weekdays: Dictionary(uniqueKeysWithValues: (0...6).map { (String($0), "常规日") }),
+        defaultTemplate: "Regular day",
+        weekdays: Dictionary(uniqueKeysWithValues: (0...6).map { (String($0), "Regular day") }),
         templates: [
-            "常规日": [WorkBlock(start: "10:00", end: "12:10"),
-                      WorkBlock(start: "13:30", end: "18:10"),
-                      WorkBlock(start: "19:30", end: "22:30")],
-            "无固定时段": []
+            "Regular day": [WorkBlock(start: "10:00", end: "12:10"),
+                            WorkBlock(start: "13:30", end: "18:10"),
+                            WorkBlock(start: "19:30", end: "22:30")],
+            "No fixed hours": []
         ]
     )
 
+    /// Translate earlier built-in names for display only; saved identifiers stay intact.
+    public func displayName(for templateID: String) -> String {
+        let title: String
+        switch templateID {
+        case "常规日": title = "Regular day"
+        case "无固定时段": title = "No fixed hours"
+        default: return templateID
+        }
+        var candidate = title
+        var suffix = 1
+        while templates[candidate] != nil {
+            candidate = "\(title) (\(suffix))"
+            suffix += 1
+        }
+        return candidate
+    }
+
     public func validated() throws -> Self {
-        guard (1...480).contains(workMinutes) else { throw ValidationError("workMinutes 必须为 1–480 的整数。") }
-        guard (1...240).contains(breakMinutes) else { throw ValidationError("breakMinutes 必须为 1–240 的整数。") }
+        guard (1...480).contains(workMinutes) else { throw ValidationError("workMinutes must be an integer between 1 and 480.") }
+        guard (1...240).contains(breakMinutes) else { throw ValidationError("breakMinutes must be an integer between 1 and 240.") }
         guard !templates.isEmpty, templates[defaultTemplate] != nil else {
-            throw ValidationError("defaultTemplate 必须引用已定义的模板。")
+            throw ValidationError("defaultTemplate must refer to an existing template.")
         }
         for (day, template) in weekdays {
             guard ["0", "1", "2", "3", "4", "5", "6"].contains(day), templates[template] != nil else {
-                throw ValidationError("weekdays.\(day) 必须是 0–6 的星期并引用已定义的模板。")
+                throw ValidationError("weekdays.\(day) must use a day from 0 to 6 and refer to an existing template.")
             }
         }
         for (name, blocks) in templates {
             guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw ValidationError("模板名称不能为空。")
+                throw ValidationError("Template names cannot be empty.")
             }
             var lastEnd = -1
             for (index, block) in blocks.enumerated() {
                 guard let start = WorkBlock.minutes(block.start), let end = WorkBlock.minutes(block.end), start < end else {
-                    throw ValidationError("模板「\(name)」第 \(index + 1) 段需要同一天的 HH:mm，且开始早于结束。")
+                    throw ValidationError("Block \(index + 1) in template '\(name)' must use same-day HH:mm times, with the start before the end.")
                 }
                 guard start >= lastEnd else {
-                    throw ValidationError("模板「\(name)」的时段必须按时间排序且不能重叠。")
+                    throw ValidationError("Blocks in template '\(name)' must be sorted by time and must not overlap.")
                 }
                 lastEnd = end
             }
@@ -87,23 +104,23 @@ public struct ScheduleConfiguration: Codable, Equatable, Sendable {
     public static func decode(_ data: Data) throws -> Self {
         // Fail on misspellings instead of silently ignoring an intended schedule change.
         let object = try JSONSerialization.jsonObject(with: data)
-        guard let root = object as? [String: Any] else { throw ValidationError("日程 JSON 顶层必须是对象。") }
+        guard let root = object as? [String: Any] else { throw ValidationError("The schedule JSON must contain an object at the top level.") }
         let allowed: Set<String> = ["workMinutes", "breakMinutes", "defaultTemplate", "weekdays", "templates"]
         if let unknown = Set(root.keys).subtracting(allowed).sorted().first {
-            throw ValidationError("未知配置项：\(unknown)。")
+            throw ValidationError("Unknown configuration field: \(unknown).")
         }
         if let templates = root["templates"] as? [String: Any] {
             for (name, value) in templates {
                 if let blocks = value as? [[String: Any]] {
                     for block in blocks where !Set(block.keys).isSubset(of: ["start", "end"]) {
-                        throw ValidationError("模板「\(name)」的时段只接受 start 和 end。")
+                        throw ValidationError("Blocks in template '\(name)' only accept start and end.")
                     }
                 }
             }
         }
         do { return try JSONDecoder().decode(Self.self, from: data).validated() }
         catch let error as ValidationError { throw error }
-        catch { throw ValidationError("日程 JSON 字段缺失或类型错误：\(error.localizedDescription)") }
+        catch { throw ValidationError("A schedule JSON field is missing or has the wrong type. \(UserFacingError.message(error))") }
     }
 }
 

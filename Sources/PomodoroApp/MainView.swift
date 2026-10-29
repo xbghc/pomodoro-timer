@@ -17,11 +17,11 @@ struct WorkspaceView: View {
             HStack {
                 Image(systemName: "timer").font(.title2).foregroundStyle(PomodoroTheme.work)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("日历与记录").font(.system(size: 18, weight: .semibold))
-                    Text("计划与实际，各自清晰。").font(.caption).foregroundStyle(PomodoroTheme.secondary)
+                    Text("Calendar & History").font(.system(size: 18, weight: .semibold))
+                    Text("Planned and tracked time, side by side.").font(.caption).foregroundStyle(PomodoroTheme.secondary)
                 }
                 Spacer()
-                Text(model.now.formatted(date: .abbreviated, time: .omitted)).foregroundStyle(.secondary)
+                Text(EnglishFormat.shortDate(model.now)).foregroundStyle(.secondary)
             }.padding(22)
             if let message = model.blockingError {
                 errorBanner(message, retry: true)
@@ -29,9 +29,9 @@ struct WorkspaceView: View {
                 errorBanner(message, retry: false)
             }
             TabView(selection: $navigation.tab) {
-                TodayView(model: model).tabItem { Label("当前", systemImage: "circle.dotted") }.tag(WorkspaceTab.today)
-                HistoryView(model: model).tabItem { Label("日历", systemImage: "calendar") }.tag(WorkspaceTab.history)
-                ConfigurationView(model: model).tabItem { Label("工作模板", systemImage: "slider.horizontal.3") }.tag(WorkspaceTab.configuration)
+                TodayView(model: model).tabItem { Label("Now", systemImage: "circle.dotted") }.tag(WorkspaceTab.today)
+                HistoryView(model: model).tabItem { Label("Calendar", systemImage: "calendar") }.tag(WorkspaceTab.history)
+                ConfigurationView(model: model).tabItem { Label("Schedule", systemImage: "slider.horizontal.3") }.tag(WorkspaceTab.configuration)
             }.padding([.horizontal, .bottom], 16)
         }
         .frame(minWidth: 760, minHeight: 650)
@@ -43,8 +43,8 @@ struct WorkspaceView: View {
             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
             Text(message).font(.callout).textSelection(.enabled)
             Spacer()
-            if retry { Button("重试读取") { model.load() } }
-            else { Button("关闭") { model.errorMessage = nil } }
+            if retry { Button("Retry") { model.load() } }
+            else { Button("Dismiss") { model.errorMessage = nil } }
         }.padding(12).background(Color.orange.opacity(0.1)).padding(.horizontal, 20)
     }
 }
@@ -54,9 +54,9 @@ private enum DurationPurpose: String, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .work: return "开始工作"
-        case .rest: return "开始休息"
-        case .reminder: return "接下来专注"
+        case .work: return "Start work"
+        case .rest: return "Start break"
+        case .reminder: return "Focus for"
         }
     }
 }
@@ -75,7 +75,7 @@ private struct TodayView: View {
                         TimerDigits(model: model, size: 64)
                         Text(model.timerCaption).font(.callout).foregroundStyle(PomodoroTheme.secondary)
                         if let active = model.active {
-                            Text("自 \(AppModel.time(active.start)) 起，连续\(active.kind.title)")
+                            Text("\(active.kind.title) since \(AppModel.time(active.start))")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Text(model.detail).font(.callout).foregroundStyle(.secondary)
@@ -83,37 +83,37 @@ private struct TodayView: View {
                     }
                     Spacer(minLength: 28)
                     VStack(alignment: .trailing, spacing: 6) {
-                        Text("今日实际").font(.caption).foregroundStyle(.secondary)
-                        Text("工作  \(AppModel.minutes(model.summary(for: model.now).work))")
-                        Text("休息  \(AppModel.minutes(model.summary(for: model.now).rest))").foregroundStyle(.secondary)
+                        Text("Tracked today").font(.caption).foregroundStyle(.secondary)
+                        Text("Work  \(AppModel.minutes(model.summary(for: model.now).work))")
+                        Text("Break  \(AppModel.minutes(model.summary(for: model.now).rest))").foregroundStyle(.secondary)
                     }.font(.callout)
                 }
                 if model.active?.kind == .rest {
-                    Text("还剩 \(Int(ceil(model.restRemaining / 60))) 分钟").font(.title3).foregroundStyle(PomodoroTheme.rest)
+                    Text("\(Int(ceil(model.restRemaining / 60))) min remaining").font(.title3).foregroundStyle(PomodoroTheme.rest)
                 }
                 controls.disabled(model.isBlocked)
                 Divider()
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        Text("今日计划").font(.headline)
+                        Text("Today's schedule").font(.headline)
                         Spacer()
-                        Text(model.selectedTemplate).foregroundStyle(.secondary)
+                        Text(model.configuration.displayName(for: model.selectedTemplate)).foregroundStyle(.secondary)
                     }
                     if model.isReady {
                         let blocks = ScheduleResolver().blocks(on: model.now, configuration: model.configuration, selection: model.snapshot.selection)
-                        if blocks.isEmpty { Text("今天没有固定时段，可以手动开始工作。").foregroundStyle(.secondary) }
+                        if blocks.isEmpty { Text("No scheduled hours today. Start work whenever you are ready.").foregroundStyle(.secondary) }
                         ForEach(blocks) { block in
                             HStack {
                                 Image(systemName: block.contains(model.now) ? "circle.inset.filled" : "circle")
                                     .foregroundStyle(block.contains(model.now) ? PomodoroTheme.work : PomodoroTheme.secondary)
                                 Text("\(AppModel.time(block.start)) – \(AppModel.time(block.end))").monospacedDigit()
                                 Spacer()
-                                if block.contains(model.now) { Text("当前时段").font(.caption).foregroundStyle(.secondary) }
+                                if block.contains(model.now) { Text("Current block").font(.caption).foregroundStyle(.secondary) }
                             }
                         }
                     }
                 }
-                Text("计划到点会提醒。休息由你决定；休息结束后，需要手动开始工作。")
+                Text("You will be reminded when it is time for a break. Take it when ready, then start work again yourself.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(28)
         }
@@ -132,24 +132,24 @@ private struct TodayView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 if model.active?.kind == .work {
-                    Button("休息 \(model.configuration.breakMinutes) 分钟") { model.startRest() }.buttonStyle(.borderedProminent)
-                    Menu("接下来专注") {
+                    Button("Take a \(model.configuration.breakMinutes) min break") { model.startRest() }.buttonStyle(.borderedProminent)
+                    Menu("Focus for") {
                         ForEach([30, 60, 90], id: \.self) { minutes in
-                            Button("\(minutes) 分钟") { model.deferReminder(minutes: minutes) }
+                            Button("\(minutes) min") { model.deferReminder(minutes: minutes) }
                         }
-                        Button("其他时长…") { durationPurpose = .reminder }
+                        Button("Other duration…") { durationPurpose = .reminder }
                     }.frame(width: 145)
                 } else {
-                    Button("开始工作") { model.startWork() }.buttonStyle(.borderedProminent)
+                    Button("Start work") { model.startWork() }.buttonStyle(.borderedProminent)
                     if model.active == nil {
-                        Button("开始休息") { model.startRest() }
-                        Button("自定工作时长…") { durationPurpose = .work }
+                        Button("Start break") { model.startRest() }
+                        Button("Custom work duration…") { durationPurpose = .work }
                     }
                 }
-                if model.active != nil { Button("结束当前活动") { model.stop() } }
+                if model.active != nil { Button("End activity") { model.stop() } }
             }
             if model.active?.kind != .rest {
-                Button("自定休息时长…") { durationPurpose = .rest }.buttonStyle(.link)
+                Button("Custom break duration…") { durationPurpose = .rest }.buttonStyle(.link)
             }
         }
     }
@@ -166,13 +166,13 @@ private struct DurationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(purpose.title).font(.title2)
-            TextField("分钟", text: $minutes).textFieldStyle(.roundedBorder)
-            Text("1–\(maximum) 分钟。固定工作时段的结束时间仍然优先。")
+            TextField("Minutes", text: $minutes).textFieldStyle(.roundedBorder)
+            Text("1–\(maximum) minutes. Scheduled end times still take priority.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("确定") { if let value = Int(minutes), valid { save(value); dismiss() } }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Confirm") { if let value = Int(minutes), valid { save(value); dismiss() } }
                     .buttonStyle(.borderedProminent).disabled(!valid).keyboardShortcut(.defaultAction)
             }
         }.padding(24).frame(width: 360).modifier(SurfaceAppearance())

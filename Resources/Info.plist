@@ -5,12 +5,12 @@
     <key>CFBundleExecutable</key><string>PomodoroTimer</string>
     <key>CFBundleIdentifier</key><string>com.ghm.pomodoro-timer.native</string>
     <key>CFBundleName</key><string>PomodoroTimer</string>
-    <key>CFBundleDisplayName</key><string>工作与休息</string>
+    <key>CFBundleDisplayName</key><string>Pomodoro Timer</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.1.0</string>
-    <key>CFBundleVersion</key><string>2</string>
-    <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
-    <key>CFBundleLocalizations</key><array><string>zh-Hans</string></array>
+    <key>CFBundleShortVersionString</key><string>2.1.1</string>
+    <key>CFBundleVersion</key><string>3</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string></array>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>

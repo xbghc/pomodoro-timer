@@ -6,7 +6,7 @@ final class ActivityEngineTests: XCTestCase {
         let config = ScheduleConfiguration.example
         XCTAssertEqual(config.workMinutes, 30)
         XCTAssertEqual(config.breakMinutes, 5)
-        XCTAssertEqual(config.templates["常规日"]?.map(\.end), ["12:10", "18:10", "22:30"])
+        XCTAssertEqual(config.templates["Regular day"]?.map(\.end), ["12:10", "18:10", "22:30"])
     }
 
     func testReminderKeepsOneContinuousActivityAndEmitsOnlyOnce() throws {
@@ -86,7 +86,7 @@ final class ActivityEngineTests: XCTestCase {
         XCTAssertEqual(try stopped.stop(at: time("10:30")), [])
         XCTAssertTrue(stopped.isWaiting)
         var switched = try running()
-        XCTAssertEqual(try switched.selectTemplate("无固定时段", at: time("10:30")), [.scheduledBlockEnded])
+        XCTAssertEqual(try switched.selectTemplate("No fixed hours", at: time("10:30")), [.scheduledBlockEnded])
         var suspended = try running()
         XCTAssertEqual(try suspended.suspend(at: time("10:30")), [])
     }
@@ -126,7 +126,7 @@ final class ActivityEngineTests: XCTestCase {
         calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
         var engine = try ActivityEngine(configuration: .example, calendar: calendar)
         try engine.activate(at: time("15:50"))
-        try engine.selectTemplate("无固定时段", at: time("15:51"))
+        try engine.selectTemplate("No fixed hours", at: time("15:51"))
         XCTAssertEqual(engine.snapshot.selection?.day, "2026-10-21")
         try engine.tick(at: time("16:00"))
         XCTAssertNil(engine.snapshot.selection)
@@ -219,9 +219,9 @@ final class ActivityEngineTests: XCTestCase {
 
     func testTodaySelectionExpiresNextDayAndUsesWeekdayMapping() throws {
         var config = ScheduleConfiguration.example
-        config.weekdays["4"] = "无固定时段"
+        config.weekdays["4"] = "No fixed hours"
         var engine = try running(config: config)
-        try engine.selectTemplate("无固定时段", at: time("10:20"))
+        try engine.selectTemplate("No fixed hours", at: time("10:20"))
         XCTAssertTrue(engine.isWaiting)
         try engine.tick(at: time("10:00", day: "2026-10-22"))
         XCTAssertNil(engine.snapshot.selection)
@@ -236,7 +236,7 @@ final class ActivityEngineTests: XCTestCase {
         try engine.tick(at: time("10:15"))
         let records = engine.snapshot.records
         var changed = engine.configuration
-        changed.templates["常规日"] = [WorkBlock(start: "09:00", end: "11:00")]
+        changed.templates["Regular day"] = [WorkBlock(start: "09:00", end: "11:00")]
         try engine.replaceConfiguration(changed, at: time("10:20"))
         XCTAssertTrue(engine.isWaiting)
         XCTAssertEqual(engine.snapshot.records, records)
@@ -334,7 +334,7 @@ final class ActivityEngineTests: XCTestCase {
             case 1 where engine.active?.kind != .rest: try engine.startRest(at: now, minutes: 20)
             case 2 where engine.active?.kind == .work: try engine.deferReminder(at: now)
             case 3: try engine.stop(at: now)
-            case 4: try engine.selectTemplate("无固定时段", at: now)
+            case 4: try engine.selectTemplate("No fixed hours", at: now)
             case 5: try engine.selectTemplate(nil, at: now)
             case 6:
                 try engine.suspend(at: now)

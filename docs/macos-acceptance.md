@@ -12,7 +12,7 @@ open dist/PomodoroTimer.app
 
 ## 真实 UI 截图与核心操作
 
-待本次源代码推送后，在对应分支手动运行工作流并启用 `capture_ui`。脚本先读取会话、显示器及既有权限，启动本次构建的 release `.app`，再通过现有控件的 Accessibility `AXPress` 和真实指针移动操作应用。不会修改 TCC、安全权限、应用数据模型或界面；若环境不具备条件就停止并上传诊断记录。
+在对应分支手动运行工作流并启用 `capture_ui`。脚本先读取会话、显示器及既有权限，启动本次构建的 release `.app`，再通过现有控件的 Accessibility `AXPress` 和真实指针移动操作应用。英文版以进程参数指定中文语言偏好与 `zh_CN` locale，检查应用仍显示英文；不改系统语言或保存的偏好。逐步检查无障碍树中没有中文界面文案。不会修改 TCC、安全权限或应用数据模型；若环境不具备条件就停止并上传诊断记录。
 
 ```bash
 gh workflow run build.yml --ref "$(git branch --show-current)" -f capture_ui=true
@@ -20,16 +20,19 @@ gh workflow run build.yml --ref "$(git branch --show-current)" -f capture_ui=tru
 
 | 图片 | 操作与预期画面 |
 | --- | --- |
-| `01-main-work.png` | 打开 360×190 计时小窗，点“开始工作”，显示红色操作、工作倒计时与累计工作时长。 |
-| `02-main-rest.png` | 点“休息 5 分钟”，普通休息计时开始，切换绿色操作和休息倒计时。 |
-| `03-main-waiting.png` | 点“结束当前活动”，进入等待；此图记录手动结束，不能据此声称已等待休息自然到点。 |
+| `01-main-work.png` | 打开 360×190 计时小窗，点 Start work，显示红色操作、工作倒计时与累计工作时长。 |
+| `02-main-rest.png` | 点 Take a 5 min break，普通休息计时开始，切换绿色操作和休息倒计时。 |
+| `03-main-waiting.png` | 点 End activity，进入等待；此图记录手动结束，不能据此声称已等待休息自然到点。 |
 | `04-desktop-drawer-collapsed.png` | 手动重新工作，指针离开把手，桌边窗口收起为 12×92。 |
 | `05-drawer-work.png`、`06-desktop-drawer-expanded.png` | 指针移入把手，实际窗口展开为 360×190；分别捕获窗口和桌面位置。 |
 | `07-drawer-rest.png` | 点普通休息按钮后捕获抽屉的休息状态。 |
 | `08-settings.png` | 点小窗设置图标，打开 480×520 独立设置，查看默认时长、今日模板和菜单栏开关。 |
 | `09-calendar.png` | 从设置进入“日历与记录”，查看只读计划与操作过程中产生的实际记录。 |
-| `10-templates.png` | 打开“工作模板”，查看当天模板选择和 JSON 配置入口。 |
-| `11-menu-bar.png` | 点击真实菜单栏按钮，捕获 248 pt 宽计时面板与实际菜单栏数字。 |
+| `10-record-editor.png` | 打开 Add Record，检查活动编辑弹窗的英文标签、日期控件和按钮，取消而不保存。 |
+| `11-current-session.png` | 打开 Now 页，检查当前活动、日程与统计文案。 |
+| `12-custom-duration.png` | 打开 Custom work duration，检查分钟输入弹窗，取消而不开始工作。 |
+| `13-templates.png` | 打开 Schedule 页，查看当天模板选择和 JSON 配置入口。 |
+| `14-menu-bar.png` | 点击真实菜单栏按钮，捕获 248 pt 宽计时面板与实际菜单栏数字。 |
 
 Artifacts 名称包含 runner 和提交 SHA，保留 14 天。`manifest.json` 包含源码提交、工作流运行号、架构、应用二进制和 PNG 的 SHA-256；每张图来自系统 `screencapture`，没有替代原型。若有权限或窗口问题，诊断文件与已完成图片仍会保存。脚本限定在一次性 GitHub runner 中执行，拒绝操作已存在的应用实例，结束时只清理本次启动的进程。
 
