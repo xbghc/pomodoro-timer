@@ -1,6 +1,6 @@
-# macOS 交互验收清单（完整人工验收尚未完成）
+# macOS interaction acceptance checklist
 
-应用最低运行系统为 macOS 13.0；源码最低为 Xcode 16.0 / Swift 6.0（Swift 6 语言模式），安装 Xcode 16.0 的开发机最低为 macOS 14.5。先在符合工具链要求的 Mac 运行：
+Full manual acceptance is still pending. The app requires macOS 13.0 or later. Source builds require Xcode 16.0 / Swift 6.0 or later, using Swift 6 language mode; a development Mac running Xcode 16.0 requires macOS 14.5 or later. On a Mac meeting those toolchain requirements, run:
 
 ```bash
 ./scripts/verify.sh -Xswiftc -warnings-as-errors
@@ -8,80 +8,80 @@
 open dist/PomodoroTimer.app
 ```
 
-构建/打包脚本仅在执行机器生成应用，不上传、不公证、不发布。本地执行器仍为 Linux；2026-10-29 的 v2.1.1 英文界面已通过双架构 Mac 原生构建与真实截图流程，两种架构各生成 14 张图片，见 [验证记录](validation.md)。这些截图只覆盖记录下来的单屏操作，以下跨 Spaces、焦点、系统行为与最低系统支持仍需完整人工验收。
+The build script creates a local app only; it does not upload, notarize or publish it. The local executor is still Linux. On 2026-10-29, v2.1.1 passed native builds and real UI capture on both Mac architectures, producing 14 screenshots per architecture; see the [verification record](validation.md). These screenshots cover the recorded single-display operations. The Spaces, focus, system behavior and minimum-OS checks below still require full manual acceptance.
 
-## 真实 UI 截图与核心操作
+## Real UI screenshots and core operations
 
-在对应分支手动运行工作流并启用 `capture_ui`。脚本先读取会话、显示器及既有权限，启动本次构建的 release `.app`，再通过现有控件的 Accessibility `AXPress` 和真实指针移动操作应用。英文版以进程参数指定中文语言偏好与 `zh_CN` locale，检查应用仍显示英文；不改系统语言或保存的偏好。逐步检查无障碍树中没有中文界面文案。不会修改 TCC、安全权限或应用数据模型；若环境不具备条件就停止并上传诊断记录。
+Manually run the workflow on the intended branch with `capture_ui` enabled. The script reads the session, displays and existing permissions, launches the release `.app` built in that run, and operates existing controls with Accessibility `AXPress` and real pointer movement. It launches the English app with process-only Chinese language preferences and the `zh_CN` locale, then checks that the interface stays in English. It does not alter system language or saved preferences. At each step it checks the observed accessibility tree for Chinese UI text. TCC, security permissions and the app's data model are not modified; unsupported environments stop with diagnostics.
 
 ```bash
 gh workflow run build.yml --ref "$(git branch --show-current)" -f capture_ui=true
 ```
 
-| 图片 | 操作与预期画面 |
+| Image | Operation and expected result |
 | --- | --- |
-| `01-main-work.png` | 打开 360×190 计时小窗，点 Start work，显示红色操作、工作倒计时与累计工作时长。 |
-| `02-main-rest.png` | 点 Take a 5 min break，普通休息计时开始，切换绿色操作和休息倒计时。 |
-| `03-main-waiting.png` | 点 End activity，进入等待；此图记录手动结束，不能据此声称已等待休息自然到点。 |
-| `04-desktop-drawer-collapsed.png` | 手动重新工作，指针离开把手，桌边窗口收起为 12×92。 |
-| `05-drawer-work.png`、`06-desktop-drawer-expanded.png` | 指针移入把手，实际窗口展开为 360×190；分别捕获窗口和桌面位置。 |
-| `07-drawer-rest.png` | 点普通休息按钮后捕获抽屉的休息状态。 |
-| `08-settings.png` | 点小窗设置图标，打开 480×520 独立设置，查看默认时长、今日模板和菜单栏开关。 |
-| `09-calendar.png` | 从设置进入 Calendar & History，查看只读计划与操作过程中产生的实际记录。 |
-| `10-record-editor.png` | 打开 Add Record，检查活动编辑弹窗的英文标签、日期控件和按钮，取消而不保存。 |
-| `11-current-session.png` | 打开 Now 页，检查当前活动、日程与统计文案。 |
-| `12-custom-duration.png` | 打开 Custom work duration，检查分钟输入弹窗，取消而不开始工作。 |
-| `13-templates.png` | 打开 Schedule 页，查看当天模板选择和 JSON 配置入口。 |
-| `14-menu-bar.png` | 点击真实菜单栏按钮，捕获 248 pt 宽计时面板与实际菜单栏数字。 |
+| `01-main-work.png` | Open the 360×190 timer, click Start work, and observe red controls, a work countdown and elapsed work time. |
+| `02-main-rest.png` | Click Take a 5 min break and observe green controls and the break countdown. |
+| `03-main-waiting.png` | Click End activity to enter idle. This captures a manual end, not natural break expiration. |
+| `04-desktop-drawer-collapsed.png` | Restart work manually and move away from the handle; the edge window collapses to 12×92. |
+| `05-drawer-work.png`, `06-desktop-drawer-expanded.png` | Move the pointer onto the handle; the actual window expands to 360×190. Capture both the window and its desktop placement. |
+| `07-drawer-rest.png` | Start a regular break and capture the drawer in the break state. |
+| `08-settings.png` | Click the timer's settings icon to open the separate 480×520 window with default durations, today's template and the menu bar toggle. |
+| `09-calendar.png` | Open Calendar & History from Settings and inspect the read-only plan and actual records created during the run. |
+| `10-record-editor.png` | Open Add Record, inspect English labels, native date controls and buttons, then cancel without saving. |
+| `11-current-session.png` | Open Now and check current-activity, schedule and statistics text. |
+| `12-custom-duration.png` | Open Custom work duration, inspect the minute-entry sheet, then cancel without starting work. |
+| `13-templates.png` | Open Schedule and inspect today's template selection and the JSON configuration entry point. |
+| `14-menu-bar.png` | Click the real menu bar item and capture the 248 pt timer panel and actual menu bar digits. |
 
-Artifacts 名称包含 runner 和提交 SHA，保留 14 天。`manifest.json` 包含源码提交、工作流运行号、架构、应用二进制和 PNG 的 SHA-256；每张图来自系统 `screencapture`，没有替代原型。若有权限或窗口问题，诊断文件与已完成图片仍会保存。脚本限定在一次性 GitHub runner 中执行，拒绝操作已存在的应用实例，结束时只清理本次启动的进程。
+Artifact names include the runner and commit SHA and are retained for 14 days. `manifest.json` records the source commit, workflow run, architecture, application binary hash and PNG hashes. Every image comes from the system `screencapture` tool. If permissions or window discovery fail, diagnostics and any completed screenshots are still saved. The script runs only on disposable GitHub runners, refuses to interact with an existing app instance, and cleans up only the processes it launched.
 
-截图与单次 hover 检查不证明跨 Spaces、其他应用全屏、键盘焦点、多屏命中或睡眠集成已经验收。休息自然结束进入等待、延长专注、固定截止、历史 CRUD 等时间/数据规则的确定性测试也不能替代对应 UI 操作验收。
+Screenshots and one hover check do not prove acceptance across Spaces, other apps' full-screen spaces, keyboard focus, multiple displays or sleep integration. Deterministic tests for natural break completion, extended focus, fixed deadlines and history CRUD also do not replace the corresponding UI checks.
 
-## 窗口与焦点
+## Windows and focus
 
-- [ ] 首次启动只显示菜单栏和桌边把手，不切走正在输入的应用。
-- [ ] 在 macOS 13.0 上运行已构建应用，核实最低系统支持；在较新 macOS 上重复检查。CI runner 的系统版本不能替代 macOS 13 实机测试。
-- [ ] 在编辑器中持续输入，指针蹭到右侧把手展开；键盘焦点仍在编辑器，输入不中断。
-- [ ] 鼠标移开后收起，原展开区域可以立即点击下层应用；右缘把手仍可再次触发。
-- [ ] 快速反复跨越边缘不闪烁；按钮首次点击有效；开启“减少动态效果”时不做窗口动画。
-- [ ] 切换多个 Spaces，抽屉保持可达，不把用户送回原 Space。
-- [ ] Safari、编辑器和视频应用处于普通原生全屏时，仍能悬停唤出，且不退出全屏/抢焦点。
-- [ ] 开关“显示器具有独立的空间”，分别验证多显示器全屏、负坐标、上下排列、混合缩放、热拔插。
-- [ ] Dock 在右侧/底部、自动隐藏和 Stage Manager 下验证把手可达；若系统保留边缘行为冲突，记录实际系统版本与复现布局。
-- [ ] 到点仅展开提醒一次；收起后提醒状态保留，计时持续。重复 tick 不再次展开。
-- [ ] 小窗与设置保留可用的原生关闭按钮；小窗可最小化、拖动，关闭后仍计时。`⌘0` / `⌘1` / `⌘,` 打开对应窗口。
-- [ ] 工作、休息、等待、超时和错误状态下，计时小窗均没有文字遮挡；自定 480 分钟时，长数字会缩小适配，控制按钮保持可点击。
-- [ ] 图标按钮可通过 Tab/空格操作，有焦点指示；VoiceOver 能读出剩余时间、状态和操作名称。抽屉不抢键盘焦点，键盘操作在小窗或菜单面板完成。
-- [ ] 菜单栏点击能展开面板，面板外点击或 Escape 能关闭；在其他应用激活时也能操作其中按钮。
-- [ ] 菜单栏倒计时开关立即生效、重启后保持；隐藏数字后图标仍然可用。系统深色外观下，小窗仍保持设计稿的浅色可读配色。
-- [ ] 日历与记录窗口可以正常输入、复制粘贴日期/分钟；临时时长与历史编辑窗口不被 360×190 小窗限制。
+- [ ] First launch shows the menu bar item and edge handle without switching away from the app receiving keyboard input.
+- [ ] Run the built app on macOS 13.0 to verify minimum-OS support, then repeat on a newer release. A CI runner's OS cannot substitute for macOS 13 execution.
+- [ ] Keep typing in an editor while moving the pointer onto the right-edge handle. The drawer expands, focus stays in the editor and typing continues uninterrupted.
+- [ ] Move away to collapse the drawer. The formerly expanded area immediately passes clicks to the app underneath, while the edge handle remains responsive.
+- [ ] Repeated rapid crossings do not flicker; buttons work on the first click. Reduce Motion disables window animation.
+- [ ] Switch between Spaces. The drawer remains reachable without returning the user to the original Space.
+- [ ] In Safari, an editor and a video app's ordinary native full-screen space, hover still opens the drawer without leaving full screen or stealing focus.
+- [ ] Test with Displays have separate Spaces both enabled and disabled: multiple full-screen displays, negative coordinates, vertical layouts, mixed scaling and display hot-plugging.
+- [ ] Check reachability with a right-side or bottom Dock, Dock auto-hide and Stage Manager. Record OS version and layout for any conflicting system edge behavior.
+- [ ] A due reminder expands the drawer once. Collapsing it preserves the due state and ongoing work; later ticks do not expand it again.
+- [ ] Timer and Settings retain working native close controls. The timer can be minimized and dragged; closing it keeps recording. `⌘0`, `⌘1` and `⌘,` open their respective windows.
+- [ ] Work, break, idle, overtime and error states have no overlapping text. A custom 480-minute duration scales long digits to fit while keeping controls clickable.
+- [ ] Icon buttons support Tab/Space and show focus. VoiceOver reads the remaining time, state and action. The drawer does not take keyboard focus; keyboard operations use the timer window or menu panel.
+- [ ] Clicking the menu bar item opens the panel; an outside click or Escape closes it. Controls work while another app is active.
+- [ ] The menu bar countdown toggle applies immediately and survives restart; the icon remains usable with digits hidden. The timer keeps the design's readable light palette in system dark appearance.
+- [ ] Calendar & History supports entering and pasting dates/minutes. Custom-duration and record-editing sheets are not constrained by the 360×190 timer window.
 
-## 活动与日历
+## Activities and calendar
 
-- [ ] 默认 30/5；常规模板的结束点确为 12:10/18:10/22:30。
-- [ ] 10:00 开始、10:20 再专注一小时，11:20 才提醒；休息后只有一条 80 分钟工作记录。
-- [ ] 计划结束早于延长后的提醒时，按固定结束时间停止。
-- [ ] 提前休息、自定义分钟、休息结束等待、手动恢复后完整 30 分钟；等候时间不计入统计。
-- [ ] 工作、休息、等待三种状态下，主窗口、抽屉和菜单栏均无全屏休息入口。点击普通休息按钮只切换计时状态，没有覆盖其他应用或显示器的休息窗口。
-- [ ] Now 页显示休息剩余时间；休息结束仅温和提醒一次并进入等待。等待期间统计不增长，点击 Start work 才恢复；下一固定起点仍按日程接管。
-- [ ] 日历清晰区分只读计划与实际。新增/编辑/删除自动和手动记录后，汇总立即更新。
-- [ ] 未来、重叠、与当前活动冲突的记录不能保存并有英文解释；未修改时间的秒/毫秒不变。
-- [ ] 跨午夜记录在两日各自裁剪；夏令时切换日（含半小时偏移）显示与统计按实际日长度。
+- [ ] Defaults are 30/5; the regular template ends at 12:10, 18:10 and 22:30.
+- [ ] Start at 10:00, extend focus for one hour at 10:20, and receive the reminder at 11:20. Taking a break produces one 80-minute work record.
+- [ ] If a planned end precedes an extended reminder, recording stops at the fixed end.
+- [ ] Test early breaks, custom minutes, idle after a break and manual resume with a full 30 minutes. Idle time never enters statistics.
+- [ ] Work, break and idle states have no full-screen break entry in the main window, drawer or menu bar. Starting a regular break changes only the timer state and never overlays other apps or displays.
+- [ ] Now shows remaining break time. Natural break completion reminds once and enters idle. Records and totals stop growing until Start work is clicked; the next fixed start still follows the schedule.
+- [ ] The calendar clearly separates the read-only plan from actual activity. Adding, editing and deleting automatic or manual records updates totals immediately.
+- [ ] Future, overlapping or active-activity-conflicting records are rejected with English explanations. Unedited seconds and milliseconds remain unchanged.
+- [ ] Records crossing midnight are clipped separately for each day. Display and statistics follow the actual day length across daylight-saving transitions, including half-hour shifts.
 
-## 配置、保存与生命周期
+## Configuration, storage and lifecycle
 
-- [ ] 今天切换模板只影响今天，次日按星期映射；修改 JSON 不改写实际历史。
-- [ ] 修改 JSON 后重新加载有效；错误 JSON 保留最后有效内存配置，不覆盖编辑文件。
-- [ ] 错误 JSON 下重新启动明确报错，能打开 JSON 修复并重试。
-- [ ] 休眠/唤醒、正常退出/重启不把离线时间记入活动；时段中途启动只从当前时刻开始。
-- [ ] 强制终止后重启，只恢复到最后成功检查点（目标保存间隔 5 秒），不生成重复 ID 或重复记录。
-- [ ] 系统时间回退、时区变更、磁盘写入失败时明确暂停，不继续制造无效统计；修复后可重新读取。
-- [ ] 同时启动两次只有一个数据写入者，第二次唤出已有主窗口。
-- [ ] 用户原 Electron 数据文件保持不变，新应用只使用新的 Application Support 目录。
+- [ ] Changing today's template affects only today; the next day uses its weekday mapping. Editing JSON does not rewrite actual history.
+- [ ] Valid JSON edits take effect on reload. Invalid JSON preserves the last valid in-memory configuration and does not overwrite the edited file.
+- [ ] Startup with invalid JSON reports a clear error and allows opening the file for repair and retry.
+- [ ] Sleep/wake and normal exit/restart exclude offline time. Launching partway through a block records only from the current time.
+- [ ] After force termination, recovery ends at the last successful checkpoint, targeting a 5-second save interval, without duplicate IDs or records.
+- [ ] Clock rollback, time-zone changes and disk write failures safely stop or reconcile recording without invalid statistics. Repaired storage can be reloaded.
+- [ ] Launching twice leaves only one data writer; the second instance opens the existing main window.
+- [ ] Old Electron files remain untouched; the native app uses only its separate Application Support directory.
 
-## 已提供的 CI 验证路径
+## CI verification path
 
-[工作流](../.github/workflows/build.yml) 在标准 `macos-15-intel` / Xcode 16.0 和 `macos-15` / Xcode 16.4 上运行测试、编译和链接，执行 `build-macos.sh release`，检查本地 ad-hoc 签名、Mach-O 架构和 `minos 13.0`。Linux 路径使用 Swift 6.0.3。旧 Windows 发布和 Storybook/Pages 部署已删除。
+The [workflow](../.github/workflows/build.yml) runs tests, compilation and linking on standard `macos-15-intel` / Xcode 16.0 and `macos-15` / Xcode 16.4 runners. It runs `build-macos.sh release` and checks the local ad-hoc signature, Mach-O architecture and `minos 13.0`. Linux uses Swift 6.0.3. The former Windows release and Storybook/Pages deployment have been removed.
 
-普通验证 job 只有仓库读取权限；可选截图流程上传截图与诊断 artifacts。经后续合并发布授权，标签流程会上传两个架构的 ZIP 和校验和，由独立发布 job 在全部检查通过后发布 GitHub Release；无公证、签名秘密、付费服务或平台环境变更。ZIP 解压后的签名、可执行权限及架构也会校验。CI 通过后仍须完成上方窗口和系统行为的人工验收。
+Ordinary verification jobs have repository read access. Optional UI capture uploads screenshots and diagnostics. With merge/release authorization, a tag run uploads both architecture ZIPs and checksums; a separate job publishes the GitHub Release after all checks pass. No notarization, signing secrets, paid services or saved platform changes are required. Extracted ZIP signatures, executable permissions and architectures are verified as well. Passing CI does not complete the remaining window and system-behavior checks above.

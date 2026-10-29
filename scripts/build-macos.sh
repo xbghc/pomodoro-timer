@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "PomodoroTimer 的 SwiftUI/AppKit 应用必须在 macOS 上构建。Linux 只能运行 swift test。" >&2
+  echo "The PomodoroTimer SwiftUI/AppKit app must be built on macOS. Linux can only run the core tests with swift test." >&2
   exit 1
 fi
 
@@ -23,5 +23,5 @@ plutil -lint "$app_dir/Contents/Info.plist"
 # Ad-hoc signing is local only. This script does not notarize, upload, or publish.
 codesign --force --sign - "$app_dir"
 codesign --verify --strict "$app_dir"
-echo "已构建本地应用：$app_dir"
-echo "运行：open \"$app_dir\""
+echo "Built local app: $app_dir"
+echo "Run: open \"$app_dir\""

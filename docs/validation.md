@@ -1,98 +1,110 @@
-# 实际验证记录
+# Verification record
 
-## 2026-10-29：v2.1.1 英文界面与双架构验证通过
+Entries describe the state at the time of each run. Historical statements such as "not yet pushed" or "CI not run" are not statements about the current repository. The historical narrative and console summaries below have been translated into English; dates, commit IDs, run links and outcomes are preserved.
 
-[运行 40851510330](https://github.com/xbghc/pomodoro-timer/actions/runs/40851510330) 全部成功，源码提交 `325a546e594ca8a8be5adb37622a0715546b1f68`。Linux / Swift 6.0.3、Intel / Xcode 16.0、Apple Silicon / Xcode 16.4 均通过 **70 项测试、0 失败**。两个 Mac 均完成 SwiftUI/AppKit 编译、链接、release 打包、ad-hoc 签名、ZIP 解压检查、架构与 `minos 13.0` 验证。
+## 2026-10-29: English across the repository
 
-两个 Mac 均通过进程参数以中文语言偏好（`zh-Hans`、`zh_CN`）启动应用，各生成 **14 张真实截图**，`manifest.json` 均为 `passed`。截图脚本检查操作过程中读取的无障碍树，无中文界面文案。下载后核对两个 artifact 摘要与全部 28 张 PNG 的 SHA-256；ARM 全套逐张目视检查，Intel 抽检主计时窗、设置、活动编辑、临时时长弹窗与菜单栏面板，未见文字截断或控件重叠。日期、原生日期编辑控件和弹窗均显示英文。
+Translated README, design and review documents, the macOS acceptance checklist, verification history, earlier release notes and build-script messages. All 43 tracked files passed a scan for CJK text. Relative Markdown links resolve, the README JSON matches the shipped example, and historical source links and commit references remain intact.
 
-新增 5 项测试覆盖英文日期与本地时区、旧模板标识和选择兼容、模板显示名冲突、自定义名称保留，以及系统错误和 JSON 字段错误的英文提示。读取旧配置不会改写文件；已有记录和用户自定义内容保持原样。本地同样通过 70 项测试、原生源码与辅助脚本语法检查、`git diff --check`。
+Legacy template identifiers and multilingual test fixtures now use Unicode escapes. Decoding the production escapes and removing the explanatory comment reproduces the previous configuration source exactly. Existing compatibility tests still verify unchanged configuration bytes, template selection and user-defined names; the app's runtime behavior and version remain at v2.1.1.
 
-本次没有更改系统语言、保存的偏好或安全权限。上述结果只覆盖记录下来的单屏操作；macOS 13 实机、跨 Spaces、多屏和睡眠集成仍按 [验收清单](macos-acceptance.md) 人工检查。后续发布准备仅补充文档，产品源码与上述成功截图一致。
+The temporary Swift 6.0.3 toolchain ran `scripts/verify.sh` with `/tmp/pomodoro-ui-*` build/cache paths and `-Xswiftc -warnings-as-errors`: **70 tests passed, 0 failures**, followed by native source syntax parsing. All shell scripts passed `bash -n`, and `git diff --check` passed. The Linux build guard returned the expected exit code 1 with an English diagnostic. Temporary test log: `/tmp/pomodoro-english-project-verify.log`. These local checks do not constitute a new native UI capture; the versioned UI evidence is recorded below.
 
-## 2026-10-29：v2.1.0 双架构原生构建与截图通过
+## 2026-10-29: v2.1.1 English UI and both architectures passed
 
-用户要求发版后，验证分支运行 [40845616588](https://github.com/xbghc/pomodoro-timer/actions/runs/40845616588) 全部成功，源码提交 `8b55c2fd30d517f2d007f56a9a2f5c228de1c209`。Linux、Intel / Xcode 16.0、Apple Silicon / Xcode 16.4 均通过 65 项测试；两个 Mac 均完成 SwiftUI/AppKit 编译、链接、release 打包、ad-hoc 签名、架构与 macOS 13.0 最低部署目标检查。
+[Run 40851510330](https://github.com/xbghc/pomodoro-timer/actions/runs/40851510330) succeeded for source commit `325a546e594ca8a8be5adb37622a0715546b1f68`. Linux / Swift 6.0.3, Intel / Xcode 16.0 and Apple Silicon / Xcode 16.4 each passed **70 tests with 0 failures**. Both Mac jobs completed SwiftUI/AppKit compilation, linking, release packaging, ad-hoc signing, ZIP extraction checks, architecture checks and `minos 13.0` verification.
 
-两种架构各生成 11 张真实窗口/桌面截图，`manifest.json` 均为 `passed`。下载后验证 artifact 摘要与全部 22 张 PNG 的 SHA-256；ARM 全套逐张检查，Intel 抽检计时小窗、工作抽屉、设置和菜单栏面板，未见文字截断或控件重叠。实际操作确认工作/休息/等待切换，12×92 抽屉悬停展开为 360×190，480×520 设置窗可打开日历与模板，菜单栏面板可打开。没有更改安全权限；自然休息到点、跨 Spaces、多屏和最低系统仍按验收清单进行人工检查。
+Both Macs launched the app with process-only Chinese language preferences (`zh-Hans`, `zh_CN`), each producing **14 real screenshots** with a `passed` manifest. The capture script checked the observed accessibility trees for Chinese UI text. Both artifact digests and all 28 PNG SHA-256 hashes were verified after download. Every ARM screenshot was visually reviewed; Intel spot checks covered the main timer, Settings, record editor, custom-duration sheet and menu bar. No text truncation or overlapping controls were observed. Dates, native date-editing controls and sheets displayed English.
 
-前两轮定位到截图辅助脚本遗漏 SwiftUI 的 `AXLink` 角色，以及 SDK 未提供 `kAXLinkRole` 常量；最终按实际观测的角色字符串修正。真实截图还促成设置开关右对齐的小幅修正。后续发布准备仅更新验证与发布文档，应用代码与上述成功截图一致。
+Five new tests cover English dates with the local time zone, legacy template identifiers and selections, display-name collisions, custom-name preservation, and English messages for system errors and JSON field errors. Loading old configuration does not rewrite the file, and existing records and custom content remain intact. The local run also passed all 70 tests, native source and helper-script syntax checks, and `git diff --check`.
 
-## 2026-10-29：设计稿 UI 适配（本地验证）
+System language, saved preferences and security permissions were not changed. Results cover only the recorded single-display operations. macOS 13 execution, Spaces, multiple displays and sleep integration still require the [acceptance checklist](macos-acceptance.md). Subsequent release preparation updated documentation only; product source matched the successful screenshot run.
 
-按用户提供的四个 HTML 页面调整原生 UI：360×190 计时小窗与抽屉、248 pt 菜单栏面板、480×520 设置窗；日历与历史编辑移到独立窗口。采用原生字体和 AppKit 窗口控件，未加入 HTML 打包器、字体下载或 WebView。工作/休息/等待与持久化规则不变，新增纯展示层 `TimerReadout` 负责倒计时、超时量和进度。
+The [v2.1.1 release run](https://github.com/xbghc/pomodoro-timer/actions/runs/40852799475) subsequently passed on commit `c2b3f8e44a56f5b86884320edcb193b10842cf56`. Both published packages were downloaded and checked for SHA-256, version 2.1.1/build 3, English-only bundle localization, architecture and executable permissions.
 
-- 使用临时 Swift 6.0.3 工具链运行 `scripts/verify.sh`，构建与缓存位于 `/tmp/pomodoro-ui-*`，启用 `-Xswiftc -warnings-as-errors`。**65 项 XCTest 全通过、0 失败**，其中 7 项新测试覆盖等待、提醒延长、到点后继续记录、秒数取整、固定截止和休息被下一日程接管。原有 58 项测试保持通过。
-- 应用原生源码与截图辅助 Swift 脚本分别通过 `swiftc -frontend -parse -swift-version 6 -target arm64-apple-macosx13.0`；Python 截图脚本通过 AST 语法解析，`git diff --check` 通过。
-- 已更新 Mac 截图脚本，匹配真实按钮名称、三个独立窗口和新的抽屉尺寸，并包含设置与菜单栏面板截图路径。**脚本本次未在 Mac 执行，未生成原生截图。**
-- 本地是 Linux，无 SwiftUI/AppKit SDK；本次未进行原生类型检查、链接、窗口启动或视觉验收。2026-10-22 的 CI 结果只对应当时的提交，不能证明此次 UI 已在 Mac 通过。待验项目见 [验收清单](macos-acceptance.md)。
+## 2026-10-29: v2.1.0 native builds and screenshots passed
 
-此次改动保留在工作区，未推送、发布或触发远端 CI。临时验证日志：`/tmp/pomodoro-ui-verify.log`。
+After the user requested publication, verification-branch [run 40845616588](https://github.com/xbghc/pomodoro-timer/actions/runs/40845616588) succeeded on source commit `8b55c2fd30d517f2d007f56a9a2f5c228de1c209`. Linux, Intel / Xcode 16.0 and Apple Silicon / Xcode 16.4 each passed 65 tests. Both Macs completed SwiftUI/AppKit compilation, linking, release packaging, ad-hoc signing, architecture checks and verification of the macOS 13.0 deployment target.
 
-## 2026-10-22：完整真实截图与发布准备
+Each architecture produced 11 real window/desktop screenshots with a `passed` manifest. Artifact digests and all 22 PNG SHA-256 hashes were verified after download. Every ARM image was reviewed; Intel spot checks covered the timer, work drawer, Settings and menu bar panel. No text truncation or overlapping controls were observed. Real operations confirmed work/break/idle switching, hover expansion from 12×92 to 360×190, opening the calendar and templates from the 480×520 Settings window, and opening the menu bar panel. Security permissions were unchanged. Natural break completion, Spaces, multiple displays and the minimum OS remained manual acceptance items.
 
-[运行 39727287792](https://github.com/xbghc/pomodoro-timer/actions/runs/39727287792)，提交 `3bdca592528b38d6e25e3ad6680d93df32fbd801`：Linux、Intel 和 ARM 的 58 项测试均通过，两种 Mac 原生编译、链接、release 打包和部署目标检查通过；每种架构实际生成 9 张窗口/桌面截图。全部图片下载后核对 SHA-256；ARM 全套逐张目视确认，Intel 抽检主窗口和桌边展开。通过真实指针移动观察到抽屉从 12×92 展开到 348×304；没有改变安全权限。等待截图由手动结束休息获得，未据此声称已完成自然到点的 UI 验收。
+The first two attempts identified a missing SwiftUI `AXLink` role in the capture helper and the SDK's lack of a `kAXLinkRole` constant. The final helper uses the observed role string. Real screenshots also led to a small right-alignment fix for the Settings toggle. Later publication preparation changed only verification and release documentation; application code matched the successful capture run.
 
-后续经用户授权补充 v2.0.0 发布流程：PR 和 main 的 Mac 构建会生成 ZIP 并解压验证；标签流程在全部测试与两个架构通过后创建 Release 草稿，上传并重新下载校验两个 ZIP 与 SHA256SUMS，最后才公开发布。具体发布结果以对应 tag 的 GitHub Actions 和 Release 为准；新增发布自动化不修改应用业务代码。历史条目中的“尚未推送/合并/发布”描述各条目记录时的状态。
+## 2026-10-29: design adaptation, local verification
 
-## 2026-10-22：真实 GUI 探测与截图路径
+The four user-supplied HTML views informed a native 360×190 timer/drawer, 248 pt menu bar panel and 480×520 Settings window. Calendar and history editing moved to a separate window. Native fonts and AppKit controls were used, without the HTML bundler, font downloads or WebView. Work/break/idle and persistence rules stayed unchanged. The new presentation-only `TimerReadout` handles countdown, overtime and progress.
 
-[运行 39725980405](https://github.com/xbghc/pomodoro-timer/actions/runs/39725980405)，提交 `4aaa724d52fbf3e111d5dd69988a520e5ab5aea0`：Linux、Intel 和 ARM Mac 全部通过。两种 Mac 都有真实登录图形会话和既有截图/Accessibility/事件发送权限；实际启动 release `.app` 后成功捕获主窗口。ARM 图片已下载并目视确认是本次 SwiftUI 实现，窗口尺寸 860×688；其 runner 显示器为 1024×768，Intel 显示器为 1920×1080。没有更改安全权限或平台配置。
+- Ran `scripts/verify.sh` with a temporary Swift 6.0.3 toolchain, `/tmp/pomodoro-ui-*` build/cache paths and `-Xswiftc -warnings-as-errors`. **All 65 XCTest tests passed, 0 failures.** Seven new tests cover idle, reminder extension, continued recording after a reminder, second rounding, fixed deadlines and takeover of a break by the next block. The original 58 tests remained passing.
+- Native app source and the Swift capture helper each passed `swiftc -frontend -parse -swift-version 6 -target arm64-apple-macosx13.0`. The Python capture script passed AST parsing, and `git diff --check` passed.
+- The Mac capture script was updated for real button names, three separate windows, the new drawer size, Settings and menu bar captures. **It was not run on a Mac in this local stage, and no native screenshots were produced.**
+- The executor was Linux without a SwiftUI/AppKit SDK. Native type-checking, linking, window launch and visual acceptance were not performed in this stage. CI from 2026-10-22 applies only to its own commit and cannot validate these UI changes. Outstanding checks are in the [acceptance checklist](macos-acceptance.md).
 
-更早的探测脚本把 `kCGSessionOnConsoleKey` 的符号名称当成了实际字典键，提前退出。改用 SDK 常量后 `onConsole` 为 true。这个脚本错误不能作为 runner 没有 GUI 的证据。
+At this point, changes remained in the working tree without a push, release or remote CI run. Temporary log: `/tmp/pomodoro-ui-verify.log`.
 
-在此基础上扩展的可选 `capture_ui` 步骤使用现有按钮和真实指针，捕获工作、普通休息、等待、收起/展开抽屉、日历和模板。每次实际运行的截图清单、哈希和执行结果保存在该次 artifact 的 `manifest.json`；[操作及限制](macos-acceptance.md) 中明确区分真实截图、单屏 smoke 操作与仍需完成的人工验收。应用源文件没有为了截图更换界面或注入演示状态。
+## 2026-10-22: complete real screenshots and release preparation
 
-## 2026-10-22：获准推送与真实 macOS CI
+[Run 39727287792](https://github.com/xbghc/pomodoro-timer/actions/runs/39727287792), commit `3bdca592528b38d6e25e3ad6680d93df32fbd801`: Linux, Intel and ARM passed all 58 tests; both Macs passed native compilation, linking, release packaging and deployment-target checks. Each architecture produced nine actual window/desktop screenshots. All downloaded images were checked against SHA-256. Every ARM image was visually confirmed; Intel spot checks covered the main window and expanded drawer. Real pointer movement expanded the drawer from 12×92 to 348×304, without security-permission changes. The idle image came from ending a break manually, so it did not establish UI acceptance of natural break completion.
 
-用户批准推送后，以普通 fast-forward 推送发布独立分支 `codex/macos-swiftui-rewrite`。首次远端 SHA 核实为 `181363ce4058f406bfeae18ed4a6f3f0e901ba85`，后续修复提交同样逐次核对远端 SHA；没有强制覆盖、合并 main、发布版本或修改平台保存的环境设置。
+The user subsequently authorized the v2.0.0 release flow. PR and main Mac builds create ZIPs and verify their extracted contents. After all tests and both architectures pass, a tag run creates a draft Release, uploads both ZIPs and SHA256SUMS, downloads and verifies them, and finally publishes. Actual release outcomes are recorded by the corresponding tag's GitHub Actions and Release. The new publishing automation does not change application business logic. Historical "not yet pushed/merged/published" statements refer to their individual entry dates.
 
-已验证的代码与工作流提交为 [`4ccc2999343056543a0201be28fc5304c91ec6cf`](https://github.com/xbghc/pomodoro-timer/commit/4ccc2999343056543a0201be28fc5304c91ec6cf)。[CI 39724598328](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328) 已结束，整体结论 **success**：
+## 2026-10-22: real GUI detection and capture path
 
-| 执行环境 | 实际结果 | 证据 |
+[Run 39725980405](https://github.com/xbghc/pomodoro-timer/actions/runs/39725980405), commit `4aaa724d52fbf3e111d5dd69988a520e5ab5aea0`: Linux, Intel and ARM all passed. Both Macs had actual logged-in graphical sessions and existing screenshot, Accessibility and event-posting permissions. The release `.app` was launched and its main window captured. The ARM image was downloaded and visually confirmed as this SwiftUI implementation, with an 860×688 window on a 1024×768 runner display. The Intel display was 1920×1080. Security permissions and platform settings were unchanged.
+
+An earlier probe incorrectly treated the symbol name `kCGSessionOnConsoleKey` as the dictionary key and exited early. Using the SDK constant reported `onConsole` as true. That script bug was not evidence that the runners lacked a GUI.
+
+The expanded optional `capture_ui` step uses existing buttons and real pointer movement to capture work, regular breaks, idle, collapsed/expanded drawer, calendar and templates. Each artifact's `manifest.json` records the image list, hashes and execution outcome. The [procedure and limits](macos-acceptance.md) distinguish real screenshots, single-display smoke operations and remaining manual acceptance. App source was not replaced with a mockup or injected with demonstration state for capture.
+
+## 2026-10-22: authorized push and real macOS CI
+
+After push authorization, the separate `codex/macos-swiftui-rewrite` branch was pushed with an ordinary fast-forward. The first remote SHA was verified as `181363ce4058f406bfeae18ed4a6f3f0e901ba85`; every later fix's remote SHA was also checked. There was no forced overwrite, merge to main, version publication or change to saved platform settings at this stage.
+
+The verified code/workflow commit was [`4ccc2999343056543a0201be28fc5304c91ec6cf`](https://github.com/xbghc/pomodoro-timer/commit/4ccc2999343056543a0201be28fc5304c91ec6cf). [CI 39724598328](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328) completed with overall **success**:
+
+| Environment | Actual result | Evidence |
 | --- | --- | --- |
-| Linux / Swift 6.0.3 | 58 项 XCTest 全通过；原生文件仅语法解析 | [Linux job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645525877) |
-| Intel Mac / Xcode 16.0 / Swift 6.0 | 58 项全通过；SwiftUI/AppKit debug 编译与链接、release `.app` 打包、Info.plist 与 ad-hoc 签名验证全部通过；Mach-O `x86_64`、`minos 13.0`，SDK 15.0 | [Intel job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645525994) |
-| Apple Silicon Mac / Xcode 16.4 / Swift 6.1.2 | 58 项全通过；同样完成原生编译、链接、release 打包、Info.plist 与 ad-hoc 签名验证；Mach-O `arm64`、`minos 13.0`，SDK 15.5 | [ARM job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645526009) |
+| Linux / Swift 6.0.3 | All 58 XCTest tests passed; native files were syntax-parsed only | [Linux job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645525877) |
+| Intel Mac / Xcode 16.0 / Swift 6.0 | All 58 tests passed; SwiftUI/AppKit debug compilation/linking, release `.app` packaging, Info.plist and ad-hoc signature checks passed; Mach-O `x86_64`, `minos 13.0`, SDK 15.0 | [Intel job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645525994) |
+| Apple Silicon Mac / Xcode 16.4 / Swift 6.1.2 | All 58 tests and the same native compilation/linking, release packaging, Info.plist and signature checks passed; Mach-O `arm64`, `minos 13.0`, SDK 15.5 | [ARM job](https://github.com/xbghc/pomodoro-timer/actions/runs/39724598328/job/119645526009) |
 
-全部 Swift 目标采用 Swift 6 语言模式并启用 warnings-as-errors。原生 CI 实际使用 macOS 15.7.9；部署目标检查通过**不等于**已经在 macOS 13 启动应用。工作流没有运行 GUI、测试跨 Spaces/焦点/多屏交互或生成截图，也没有上传应用、使用签名秘密、公证或发布。
+All Swift targets used Swift 6 language mode and warnings-as-errors. Native CI ran macOS 15.7.9. Passing a deployment-target check **does not mean** the app was launched on macOS 13. This run did not launch the GUI, test Spaces/focus/multiple displays or create screenshots. It did not upload the app, use signing secrets, notarize or publish.
 
-CI 实际发现并修复的两个问题：
+CI found and led to two fixes:
 
-1. [首次运行](https://github.com/xbghc/pomodoro-timer/actions/runs/39724119540)：Linux 通过；ARM 编译因缺少 CoreGraphics 的 Swift 几何接口失败，Intel 被后续运行取代并取消。提交 `b5cb8a9` 在布局文件及测试中条件导入 CoreGraphics，本地 Linux 58 项复测通过。
-2. [第二次运行](https://github.com/xbghc/pomodoro-timer/actions/runs/39724379941)：两个 Mac 的 58 项测试、原生编译、链接、打包和签名均成功，但 `lipo -verify_arch` 把末尾文件路径误当作架构。提交 `4ccc299` 调整参数顺序，并显式设置 Swift 工作流的运行标题；第三次运行完整通过。
+1. [First run](https://github.com/xbghc/pomodoro-timer/actions/runs/39724119540): Linux passed; ARM compilation failed because the Swift geometry interface required CoreGraphics. Intel was superseded and canceled. Commit `b5cb8a9` added conditional CoreGraphics imports to geometry source and tests; all 58 local Linux tests passed again.
+2. [Second run](https://github.com/xbghc/pomodoro-timer/actions/runs/39724379941): both Macs passed 58 tests, native compilation, linking, packaging and signing, but `lipo -verify_arch` parsed the trailing binary path as an architecture. Commit `4ccc299` reordered arguments and set an explicit Swift workflow run title. The third run passed completely.
 
-本地执行器始终为 Linux。CLI 构建已有上述真实 Mac 证据；窗口行为、系统睡眠/唤醒及单实例的交互集成、macOS 13 实机运行和 UI 截图仍未验收，见 [人工清单](macos-acceptance.md)。以下保留推送授权之前的本地验证历史，不能将其中“尚未执行 CI”理解为当前状态。
+The local executor remained Linux. CLI builds had the Mac evidence above, while native window behavior, sleep/wake and single-instance interaction, macOS 13 execution and UI screenshots were still pending at this stage; see the [manual checklist](macos-acceptance.md). The following entries retain local history from before push authorization.
 
-## 2026-10-22：移除全屏休息
+## 2026-10-22: removal of full-screen breaks
 
-开始时位于 `codex/macos-swiftui-rewrite`，基线 `1049da7`，工作区干净；未发现额外 `AGENTS.md` 或仓库技能。本次仍为 Debian GNU/Linux 13 x86_64，没有 macOS SDK 或 `xcodebuild`。旧临时工具链已不在新环境中，重新从 Swift 官方下载同一 Swift 6.0.3 至 `/tmp/pomodoro-swift-toolchain`，没有修改平台环境设置。
+Started on `codex/macos-swiftui-rewrite` at `1049da7` with a clean working tree. No additional AGENTS.md or repository skills were found. The executor was Debian GNU/Linux 13 x86_64 without a macOS SDK or `xcodebuild`. The previous temporary toolchain was absent in the new environment, so the same official Swift 6.0.3 toolchain was downloaded to `/tmp/pomodoro-swift-toolchain` without changing saved platform settings.
 
-- 删除多屏休息窗口文件、主窗口/抽屉的全屏入口、应用模型专用回调和参数，以及退出、睡眠、屏幕变化和状态刷新中的专用窗口处理。
-- 领域状态与持久化格式没有修改；普通休息到点事件和倒计时继续服务主窗口/抽屉。加强已有确定性测试，核对休息仅提醒一次、等待期间记录/统计不增长、手动恢复从点击时刻开始并获得完整 30 分钟。
-- 使用下方相同的 `verify.sh` 命令和 `/tmp` 缓存参数，启用 Swift 6 语言模式与 `-Xswiftc -warnings-as-errors`。脚本退出 **0**，2026-10-22 04:25:39 UTC：**58 项 XCTest，0 失败，无编译警告**；测试组数量保持 29 / 9 / 17 / 3。临时完整日志：`/tmp/pomodoro-remove-fullscreen-verification.log`。
-- 原生源码的 `swiftc -frontend -parse` 通过，**仅语法解析**；`bash -n scripts/verify.sh scripts/build-macos.sh` 和 `git diff --check` 通过。
-- 搜索确认 Swift 源码中没有全屏休息入口、控制器或专用回调残留。抽屉仍保留 `.fullScreenAuxiliary`，用于其他应用全屏空间中的悬停唤出，符合原设计。
-- README、设计、静态审查和 macOS 验收清单同步更新；新增人工检查普通休息不会打开覆盖其他应用/显示器的窗口。
+- Removed the multi-display break-window source, full-screen entries in the main window/drawer, dedicated model callbacks and parameters, and corresponding exit/sleep/display/state-refresh handling.
+- Domain states and persistence formats stayed unchanged. Regular break-completion events and countdowns still serve the main window and drawer. Existing deterministic tests were strengthened to verify one reminder, no record/statistic growth while idle, and manual resume from the click with a full 30-minute duration.
+- Used the `verify.sh` command below with `/tmp` caches, Swift 6 language mode and `-Xswiftc -warnings-as-errors`. Exit code **0**, 2026-10-22 04:25:39 UTC: **58 XCTest tests, 0 failures, no compiler warnings**. Suite counts remained 29 / 9 / 17 / 3. Temporary full log: `/tmp/pomodoro-remove-fullscreen-verification.log`.
+- Native source passed `swiftc -frontend -parse`, **syntax only**. `bash -n scripts/verify.sh scripts/build-macos.sh` and `git diff --check` passed.
+- Source search found no full-screen break entry, controller or dedicated callback references. The drawer retained `.fullScreenAuxiliary` to remain accessible in other apps' full-screen spaces, as designed.
+- README, design, static review and macOS acceptance documentation were updated, including a manual check that regular breaks never overlay other apps or displays.
 
-macOS SDK 类型检查、链接、打包和原生 UI 验收**仍未执行**：Linux 无法运行 SwiftUI/AppKit。具体步骤见 [macOS 验收清单](macos-acceptance.md)。这是平台能力限制，不是权限拒绝；本轮没有推送、合并、发布或触发远端 CI，CI 文件与平台保存配置未修改。
+macOS SDK type-checking, linking, packaging and native UI acceptance **had not yet run**. Linux cannot run SwiftUI/AppKit. See the [macOS acceptance checklist](macos-acceptance.md). This was a platform limitation, not a permission denial. There was no push, merge, release or remote CI trigger in this stage, and the CI file and saved platform configuration were unchanged.
 
-## 2026-10-21：原生重写与静态审查
+## 2026-10-21: native rewrite and static review
 
-日期：2026-10-21。环境：Debian GNU/Linux 13、x86_64；工作目录 `/workspace/pomodoro-timer`。
+Date: 2026-10-21. Environment: Debian GNU/Linux 13, x86_64. Working directory: `/workspace/pomodoro-timer`.
 
-### 基线与范围
+### Baseline and scope
 
-- 开始时分支为 `work`，提交 `0931ff38cb3d04f3e6b15db9fb43ae29defff216`，工作区干净。
-- 未发现仓库/上级 `AGENTS.md`，`/workspace/.agents/skills` 不存在；没有额外仓库技能可执行。
-- 新分支为 `codex/macos-swiftui-rewrite`。没有推送、合并、发布或修改云环境、远端权限。
-- 旧产品基线 `node --test`：38 项通过。此结果只用于审查旧实现，不作为 Swift 产品验收。
-- 首次原生实现提交 `3eec263` 的核心测试为 47 项；后续静态审查与修复将当前测试增加到 58 项，下面记录最终结果。
-- PATH 原本没有 Swift。从 Swift 官方下载的 Swift 6.0.3 Ubuntu 24.04 x86_64 工具链临时解压至 `/tmp/pomodoro-swift-toolchain`，实际 `swift --version` 为 `Swift version 6.0.3 (swift-6.0.3-RELEASE)`。工具链、构建和缓存均在 `/tmp`，没有加入仓库或修改系统安装/共享环境配置。
+- Started on `work` at `0931ff38cb3d04f3e6b15db9fb43ae29defff216` with a clean working tree.
+- No repository/parent AGENTS.md was found; `/workspace/.agents/skills` did not exist. No additional repository skill applied.
+- Created `codex/macos-swiftui-rewrite` without pushing, merging, publishing or changing cloud settings or remote permissions.
+- The old product's `node --test` baseline passed 38 tests. This was historical implementation evidence, not Swift acceptance.
+- The initial native implementation at `3eec263` had 47 core tests. Subsequent review and fixes brought the total to 58; the final results follow.
+- Swift was not on PATH. The official Swift 6.0.3 Ubuntu 24.04 x86_64 toolchain was extracted temporarily to `/tmp/pomodoro-swift-toolchain`. Its version was `Swift version 6.0.3 (swift-6.0.3-RELEASE)`. Toolchain, builds and caches stayed in `/tmp`, without repository additions, system installation or shared-environment changes.
 
-### 已执行且通过
+### Checks performed and passed
 
-最终通过统一验证脚本运行：
+Final verification used:
 
 ```bash
 PATH=/tmp/pomodoro-swift-toolchain/usr/bin:$PATH \
@@ -106,41 +118,42 @@ SWIFTPM_MODULECACHE_OVERRIDE=/tmp/pomodoro-module-cache \
   -Xswiftc -warnings-as-errors
 ```
 
-脚本退出码 **0**。全部目标采用 Swift 6 语言模式；核心编译启用 warnings-as-errors，无警告。2026-10-21 15:50:25 UTC 的 XCTest 结果：
+Exit code **0**. All targets used Swift 6 language mode; the core built with warnings-as-errors and no warnings. The XCTest result at 2026-10-21 15:50:25 UTC was:
 
 ```text
 Test Suite 'All tests' passed
 Executed 58 tests, with 0 failures (0 unexpected)
-核心测试与原生源码语法解析完成。Linux 未编译或运行 SwiftUI/AppKit。
 ```
 
-| 测试组 | 数量 | 覆盖 |
+The script's closing message, translated: core tests and native source parsing completed; Linux did not compile or run SwiftUI/AppKit.
+
+| Suite | Count | Coverage |
 | --- | ---: | --- |
-| ActivityEngineTests | 29 | 30/5、连续 80 分钟记录、提醒只发一次、固定截止优先、提前休息、手动恢复、模板切换/本地跨日、睡眠/工作和休息中崩溃恢复、回拨、七天混合操作、失效提醒筛选、休息实际截止与固定起点接管 |
-| ConfigurationTests | 9 | JSON 样例与代码默认一致、字段/模板/星期/时刻错误、重叠/排序、半开区间、夏令时缺失与重复小时 |
-| HistoryAndPersistenceTests | 17 | 自动/手动历史 CRUD、统计、未来/重叠/当前活动拒绝、毫秒往返、损坏文件/极端日期/矛盾检查点拒绝、配置回退、检查点、写失败暂停、退出恢复、历史操作同时到点的提醒、回拨写保护、半小时夏令时 |
-| DrawerGeometryTests | 3 | 收起真实命中区域、外侧屏幕选择、负坐标、上下排列和空屏幕列表 |
+| ActivityEngineTests | 29 | 30/5 defaults, one continuous 80-minute record, reminders once, fixed-end priority, early breaks, manual resume, template/local-day changes, sleep and crashes during work/breaks, rollback, seven days of mixed actions, obsolete reminder filtering, actual break deadlines and fixed-start takeover |
+| ConfigurationTests | 9 | JSON/example consistency, invalid fields/templates/weekdays/times, overlaps/order, half-open intervals, missing and repeated daylight-saving hours |
+| HistoryAndPersistenceTests | 17 | Automatic/manual history CRUD, statistics, future/overlap/active conflicts, millisecond round trips, corrupt files/extreme dates/inconsistent checkpoints, configuration fallback, checkpoints, write-failure pauses, exit recovery, reminders coinciding with history actions, rollback write protection and half-hour daylight-saving transitions |
+| DrawerGeometryTests | 3 | Real collapsed hit area, outer-screen selection, negative coordinates, vertical displays and empty display lists |
 
-另外执行：
+Additional checks:
 
-- `swiftc -frontend -parse -swift-version 6 -target arm64-apple-macosx13.0 Sources/PomodoroApp/*.swift`：通过，**仅语法解析**。
-- `bash -n scripts/build-macos.sh scripts/verify.sh`：通过。
-- Python `plistlib` 解析 Info.plist，核对 `LSUIElement` 和可执行文件名；JSON 示例解析：通过。
-- 在 Linux 执行 `scripts/build-macos.sh`：按预期返回 **1** 并解释必须在 macOS 构建，没有假造 `.app` 产物。
-- `actionlint 1.7.12 .github/workflows/build.yml`：通过，检查 GitHub 工作流语法、表达式和 runner/action 配置。工具下载到 `/tmp/pomodoro-review-tools` 并对照官方 release checksums 校验，没有修改系统工具配置。
-- `git diff --check`：通过。旧 Windows 和 Storybook 发布路径、Electron `.npmrc` 已按后续授权替换/删除。
+- `swiftc -frontend -parse -swift-version 6 -target arm64-apple-macosx13.0 Sources/PomodoroApp/*.swift`: passed, **syntax only**.
+- `bash -n scripts/build-macos.sh scripts/verify.sh`: passed.
+- Python `plistlib` parsed Info.plist and checked `LSUIElement` and the executable name; the JSON example parsed successfully.
+- Running `scripts/build-macos.sh` on Linux returned **1** as expected and explained that macOS was required. No substitute `.app` was fabricated.
+- `actionlint 1.7.12 .github/workflows/build.yml`: passed, covering workflow syntax, expressions and runner/action settings. The tool was downloaded to `/tmp/pomodoro-review-tools` and verified against official release checksums without changing system tools.
+- `git diff --check`: passed. Old Windows and Storybook release paths and the Electron `.npmrc` were replaced/removed under subsequent authorization.
 
-首次尝试 Swift 测试曾因默认 Clang 模块缓存指向只读的 `/home/agent/.cache` 失败。随后仅通过命令级环境变量和 SwiftPM 参数把缓存指向 `/tmp`，全部测试成功。没有申请提升权限，也没有自动审批拒绝或结果不确定的写入。
+The first Swift test attempt failed because the default Clang module cache pointed to read-only `/home/agent/.cache`. Command-scoped environment variables and SwiftPM arguments redirected caches to `/tmp`, and all tests passed. No escalation, automatic approval rejection or uncertain write occurred.
 
-后续新增的 Lord Howe 半小时夏令时测试最初失败：Foundation `.nextTime` 将缺失的 02:10 解析为次日。改成逐分钟寻找当天有效时刻后，包含该项的最终 58 项全部通过。详细修复与 API/并发审查见 [静态审查记录](static-review.md)。
+The added Lord Howe half-hour daylight-saving test initially failed: Foundation `.nextTime` moved missing 02:10 to the next day. Searching minute by minute for a valid time on the same day resolved it; the final 58 tests, including that case, passed. See the [static review](static-review.md) for fix and API/concurrency details.
 
-### 未执行，不能视为通过
+### Checks not performed at this stage
 
-- macOS SDK 下的 SwiftUI/AppKit **类型检查、链接、应用启动**。
-- `.app` 打包脚本中的 `plutil`、`codesign` 和 Finder 启动。
-- 真实跨 Spaces、其他应用全屏、焦点、多显示器、Dock、Stage Manager、键盘/VoiceOver 和窗口动画验收。
-- macOS 系统睡眠/唤醒、退出通知与单实例锁的实机集成。领域层对应语义已测，但不能替代系统验收。
+- SwiftUI/AppKit **type-checking, linking and application launch** with a macOS SDK.
+- `.app` packaging through `plutil`, `codesign` and Finder launch.
+- Real Spaces, other apps' full-screen spaces, focus, multiple displays, Dock, Stage Manager, keyboard/VoiceOver and window animation acceptance.
+- Actual macOS sleep/wake, exit-notification and single-instance-lock integration. Domain semantics were tested, but did not replace system acceptance.
 
-执行平台没有 macOS SDK/图形系统。上述状态是**待 macOS 验证**，不是权限拒绝，也没有尝试远端构建或伪造截图。[验收步骤](macos-acceptance.md) 已逐项列出。
+The executor lacked a macOS SDK and graphical system. These checks were **pending macOS verification**, not denied by permissions. No remote build or fabricated screenshot was attempted. The [acceptance procedure](macos-acceptance.md) listed each outstanding item.
 
-仓库 CI 已提供可执行的 Mac 验证路径：标准 `macos-15-intel` / Xcode 16.0 与 `macos-15` / Xcode 16.4，运行测试、真实 SwiftUI/AppKit 编译/链接、release 打包、ad-hoc 签名验证、架构和 Mach-O 最低部署版本检查。工作流无发布、上传、公证或签名秘密。本轮没有推送，**远端 CI 尚未运行**，不能把 actionlint 通过当作 Mac job 已通过。平台保存的环境设置与外部权限未改动。
+At this stage, the repository CI provided an executable Mac path on standard `macos-15-intel` / Xcode 16.0 and `macos-15` / Xcode 16.4, covering tests, real SwiftUI/AppKit compilation/linking, release packaging, ad-hoc signature verification, architecture and Mach-O deployment targets. That workflow had no publishing, uploads, notarization or signing secrets. No push had occurred and **remote CI had not run**; actionlint success was not evidence of Mac job success. Saved platform settings and external permissions were unchanged.

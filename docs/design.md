@@ -1,67 +1,72 @@
-# macOS 原生实现与时间语义
+# Native macOS implementation and time semantics
 
-本次重写基于 `0931ff38`，分支 `codex/macos-swiftui-rewrite`。产品是动态工作日程表。旧 Electron、Flutter 能力验证和 Activity v2 的默认值不属于新产品实现。
+The native rewrite started from `0931ff38` on `codex/macos-swiftui-rewrite`. The product is a dynamic work schedule. Earlier Electron behavior, Flutter feasibility work and Activity v2 defaults are historical context rather than requirements for this implementation.
 
-## 已确认的产品规则
+## Confirmed product rules
 
-- 状态仅为工作、休息、等待；只有实际工作和休息参与统计。
-- 默认工作 30 分钟、休息 5 分钟。工作提醒与活动区间分开存储；提醒到点只通知一次，工作继续。真正休息或停止才关闭工作记录。
-- 10:00 开始，10:20 选择再专注 60 分钟，11:20 提醒。此时休息得到一条 80 分钟记录。固定计划截止优先。
-- 可以提前休息、自选临时时长。下一次开始工作重新取得完整默认时长。休息结束进入等待，不自行开始工作。
-- JSON 定义日模板、星期映射与默认时长。常规示例为 10:00–12:10、13:30–18:10、19:30–22:30；应用只覆盖今天使用的模板。星期/周末/特殊周五安排未经确认，因此初始星期映射只是示例，不声称是用户偏好。
-- 固定起点自动开始工作；固定终点停止当前活动并提示。中途启动只从当前时刻记录，不补记此前时段。
-- 日历区分只读计划和可修改实际记录。所有已结束记录都能增改删，包含自动生成的记录。编辑计划不改变实际历史。
-- 数据不自动清空或过期。睡眠、退出、未运行期间不计时，可手动补录。没有旧版读取、迁移或删除旧文件的代码。
-- 桌边 hover 抽屉是主要交互，不是菜单栏弹窗。悬停和提醒不请求键盘焦点。普通休息通过抽屉、主窗口或菜单栏控制，主窗口显示剩余时间。没有日志/下一步表单或外部集成。
+- The activity states are work, break and idle. Only actual work and break time count toward statistics.
+- Defaults are 30 minutes of work and 5 minutes of break. Work reminders are stored separately from activity intervals. A reminder fires once and work continues; taking a break or stopping closes the work record.
+- Starting at 10:00 and extending focus by 60 minutes at 10:20 gives an 11:20 reminder. Taking a break then produces one 80-minute record. A fixed schedule end takes priority.
+- Early breaks and custom durations are supported. The next work activity starts with the full default duration. A completed break enters idle without automatically starting work.
+- JSON defines daily templates, weekday mappings and default durations. The regular example uses 10:00–12:10, 13:30–18:10 and 19:30–22:30. In-app selection overrides today's template only. Weekday, weekend and special Friday arrangements were not confirmed; the initial mapping is an editable example rather than a claimed user preference.
+- Fixed starts automatically begin work; fixed ends stop the current activity and prompt the user. Launching partway through a block records from the current time without backfilling earlier time.
+- The calendar separates read-only plans from editable actual records. All completed records can be added, edited or deleted, including automatically generated records. Plan edits do not alter actual history.
+- Data does not expire or clear automatically. Time spent asleep, exited or otherwise offline is excluded and can be added manually. The native app does not read, migrate or delete old Electron files.
+- The edge drawer is the primary interaction. Hover and reminders do not request keyboard focus. Breaks are controlled through the drawer, timer window or menu bar; the timer shows remaining time. There are no journal/next-step forms or external integrations.
 
-## 明确选择的工程默认值
+## Engineering defaults
 
-这些处理规则是实现选择，不是全部来自用户逐字确认：
+These are explicit implementation choices; not all were confirmed word for word by the user:
 
-1. 区间均为 `[start, end)`，允许相邻、拒绝重叠、未来或零长度实际记录。编辑时保持记录 ID 和未修改的毫秒值。进行中的活动先结束再编辑。
-2. 固定起点接管跨入该时段的休息；跨入固定时段的手动工作保持同一记录，并取得该时段的固定截止。
-3. 今天换模板时，若仍在工作时段内，更新固定截止但不拆记录、不重置提醒。若新模板不再覆盖当前时间，从切换时刻停止；若从无时段切入有效时段，从当前时刻开始。已在同一时段等待时，换模板或重载 JSON 不绕过手动恢复。
-4. 计划视图按当前 JSON 计算，不保存不可变的历史排班快照；当天覆盖跨日失效。历史实际记录永久保留。
-5. 计划外手动工作可以跨午夜，不做每日自动截断；统计按本地日界线截取。
-6. 正常退出/睡眠时关闭活动；启动/唤醒若处于固定工作段，从当前时刻开始新活动，否则等待。休眠前的活动不会穿越离线间隔。
-7. 以每 5 秒为目标间隔保存观察检查点，所有用户操作和边界变化立即保存。异常退出只结算到最后成功保存的观察时刻，不回填离线；恢复精度取决于实际成功的检查点，不承诺在调度延迟或写失败时仍最多丢失 5 秒。活动稳定 ID 和单一原子文件防止历史/检查点错位。新实例通过进程锁拒绝并发写入。
-8. 定时器晚到时，已知固定截止或休息截止按准确边界结算；完全错过的时段不创建活动。若当前仍在新时段，最多从本次观察时刻开始，不补记空白。系统睡眠由 AppKit 通知明确截断。
-9. 系统时间早于最后观察或历史末端时，关闭活动到最后观察并安全等待；校正/追平时间后恢复当前固定时段。暂停期间拒绝活动、历史和配置修改。
-10. JSON 无效时保留内存中最后有效配置及原文件；启动时无有效配置则明确阻止记录。损坏的历史同样报错，不静默替换为空。写入失败停止后续修改，允许修复文件/磁盘后重新读取。
-11. 使用本地系统时区。夏令时不存在的时刻逐分钟查找当天随后第一个有效时刻，重复时刻取第一次；若整段折叠成零长度或当天没有后续有效时刻则不创建该段。日统计与日历高度采用 Calendar 日边界，支持 23/25 小时及 23.5 小时日期。时区变更结算旧活动后按新本地时间重新观察。
-12. 温和提醒使用抽屉短暂展开（6 秒）、到点状态和菜单栏状态，不申请通知/辅助功能/屏幕录制权限。无提醒轰炸或强制休息。关闭主窗口不会退出。
-13. 历史编辑与提醒边界同时发生时，已提交的操作仍交付提醒事件；主动休息/停止/换到无计划模板时，不再显示已经失效的工作提醒。休息倒计时使用休息截止、固定截止、下一固定起点接管中的最早者。
-14. 持久化日期必须在 Foundation 的 distantPast…distantFuture 日历范围内；检查点不得保留已过期活动或与观察时间矛盾的提醒标记。损坏数据拒绝加载而非进入日历计算。
+1. Intervals use `[start, end)`. Adjacent intervals are valid; overlapping, future or zero-length actual records are rejected. Edits preserve the record ID and unchanged millisecond values. An active activity must end before editing.
+2. A scheduled start takes over a break that extends into the block. Manual work crossing into a scheduled block stays in the same record and acquires that block's fixed end.
+3. Changing today's template within a work block updates the fixed end without splitting the record or resetting the reminder. If the new template no longer covers the current time, recording stops at the switch. Moving from an empty period into a valid block starts from the current time. Switching templates or reloading JSON while already idle in the same block does not bypass manual resume.
+4. Plans are calculated from the current JSON; immutable historical schedule snapshots are not stored. Today's override expires at the local day boundary. Actual history remains indefinitely.
+5. Manual work outside scheduled hours can cross midnight without an automatic daily split. Statistics clip intervals to local day boundaries.
+6. Normal exit or sleep closes the activity. Startup or wake begins a new activity from the current time if a work block is active; otherwise it remains idle. An activity from before sleep never spans the offline interval.
+7. Observation checkpoints target a 5-second interval; user actions and boundary changes save immediately. Crash recovery settles only to the last successfully saved observation, without offline backfill. Recovery precision depends on successful checkpoint writes; scheduling delays or write failures can lose more than 5 seconds. Stable activity IDs and a single atomic file keep history and checkpoint state consistent. A process lock prevents concurrent writers.
+8. When a timer tick is late, known schedule or break deadlines settle at their exact boundaries. Fully missed blocks create no activity. If a new block is still active, recording begins no earlier than the current observation. AppKit sleep notifications explicitly close the interval before sleep.
+9. If the system clock precedes the last observation or the end of history, the activity closes at the last observation and enters a safe waiting state. Once the clock is corrected or catches up, the current fixed block can resume. Activity, history and configuration mutations are blocked while paused.
+10. Invalid JSON preserves the last valid in-memory configuration and the original file. Invalid configuration at startup blocks recording explicitly. Corrupt history reports an error instead of silently becoming empty. A write failure blocks further changes and allows reloading after repairing the file or disk.
+11. Scheduling uses the local system time zone. For nonexistent daylight-saving times, search minute by minute for the next valid time on the same day; for repeated times, choose the first occurrence. A block is omitted if it collapses to zero length or has no later valid time that day. Statistics and calendar height use Calendar day boundaries, including 23-, 25- and 23.5-hour days. A time-zone change settles the old activity before observing the new local time.
+12. Gentle reminders briefly expand the drawer for 6 seconds, update the due state and update the menu bar. The app does not request notification, Accessibility or screen-recording permissions. Reminders do not repeat continuously or enforce breaks. Closing the timer window keeps the app running.
+13. When a history edit coincides with a reminder boundary, a committed transaction still delivers the reminder event. Taking a break, stopping or choosing an empty template suppresses an obsolete work reminder. The break countdown uses the earliest of its own deadline, the fixed end or the next scheduled work start.
+14. Persisted dates must lie within Foundation's `distantPast` through `distantFuture` calendar range. Checkpoints cannot retain expired activities or reminder flags inconsistent with the observation time. Corrupt data is rejected before calendar calculations.
 
-## 结构
+## Structure
 
-| 层 | 文件 | 责任 |
+| Layer | Files | Responsibilities |
 | --- | --- | --- |
-| 配置与日程 | `Configuration.swift` | 严格 JSON 校验、模板选择、本地日界线及计划边界 |
-| 领域数据 | `Activity.swift` | 活动/检查点、历史约束、按日裁剪统计 |
-| 状态机 | `ActivityEngine.swift` | 显式时间输入、提醒、计划接管、等待、睡眠/恢复、回拨保护 |
-| 应用服务 | `Persistence.swift` | 注入时钟和存储；候选状态先保存成功再提交；事务与 5 秒检查点 |
-| 布局 | `DrawerGeometry.swift` | 多屏外缘选择与两种真实窗口尺寸，可在 Linux 单测 |
-| 倒计时展示 | `TimerReadout.swift` | 提醒/固定截止/休息接管的显示投影，不改变活动状态 |
-| SwiftUI | `TimerView.swift`、`MenuBarView.swift`、`SettingsView.swift`、`Theme.swift` | 共用紧凑计时、菜单栏面板、独立设置及视觉样式 |
-| 日历与记录 | `MainView.swift`、`HistoryView.swift` | 当前活动、临时时长、今日模板、计划/实际日历与历史编辑 |
-| macOS 宿主 | `PomodoroApp.swift`、`AppModel.swift` | 单实例、菜单栏、主窗口、系统睡眠/唤醒与时区通知 |
-| 原生窗口 | `DrawerController.swift` | 悬停抽屉、跨空间、实际命中范围 |
+| Configuration and scheduling | `Configuration.swift` | Strict JSON validation, template selection, local day and schedule boundaries |
+| Domain data | `Activity.swift` | Activities/checkpoints, history constraints and daily clipped statistics |
+| State machine | `ActivityEngine.swift` | Explicit time inputs, reminders, schedule takeover, idle, sleep/recovery and rollback protection |
+| Application services | `Persistence.swift` | Injected clocks and storage; save candidate state before committing it; transactions and 5-second checkpoints |
+| Geometry | `DrawerGeometry.swift` | Outer-screen placement and two real window sizes, testable on Linux |
+| Timer presentation | `TimerReadout.swift` | Countdown, fixed-end and break-takeover display without activity-state mutations |
+| English presentation | `EnglishFormat.swift`, `UserFacingError.swift` | English date/time formats and application-owned error messages |
+| SwiftUI | `TimerView.swift`, `MenuBarView.swift`, `SettingsView.swift`, `Theme.swift` | Shared compact timer, menu bar panel, separate settings and visual styles |
+| Calendar and history | `MainView.swift`, `HistoryView.swift` | Current activity, custom duration, today's template, planned/actual calendar and record editing |
+| macOS host | `PomodoroApp.swift`, `AppModel.swift` | Single instance, menu bar, windows, sleep/wake and time-zone notifications |
+| Native windows | `DrawerController.swift` | Hover drawer, Spaces behavior and real hit area |
 
-领域库使用 Foundation，几何布局在 Apple 平台显式导入 CoreGraphics，Linux 使用 Foundation 提供的几何类型；应用依赖 SwiftUI/AppKit，全部目标使用 Swift 6 语言模式。UI、窗口控制器与应用模型在 MainActor；系统通知显式交付到主队列，休眠回调同步保存检查点，延迟收起使用可取消的 MainActor Task。Package.swift 在非 macOS 上只声明领域库与测试目标，没有用一个 Linux 空壳冒充原生应用。
+The domain library uses Foundation. Geometry explicitly imports CoreGraphics on Apple platforms and uses Foundation's geometry types on Linux. The app depends on SwiftUI/AppKit; all targets use Swift 6 language mode. Views, window controllers and the app model run on MainActor. System notifications are delivered explicitly to the main queue; sleep callbacks save synchronously, and delayed drawer collapse uses a cancellable MainActor Task. On non-macOS platforms, Package.swift declares only the domain library and tests.
 
-## 窗口机制及实机限制
+## Windows and hardware verification limits
 
-抽屉使用 `NSPanel` 的 [nonactivatingPanel](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/nonactivatingpanel)，禁止成为 key/main window，采用 `NSTrackingArea` 的 activeAlways 捕捉非激活应用中的悬停。`LSUIElement`/accessory 运行方式、[canJoinAllSpaces](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallspaces) 与 [fullScreenAuxiliary](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/fullscreenauxiliary) 共同用于跨 Spaces 和普通其他应用全屏。Space 切换只重新放置并 `orderFrontRegardless`，不会调用 activate。
+The drawer is an `NSPanel` with [nonactivatingPanel](https://developer.apple.com/documentation/appkit/nswindow/stylemask-swift.struct/nonactivatingpanel). It cannot become a key or main window and uses `NSTrackingArea.activeAlways` to detect hover while the app is inactive. The `LSUIElement`/accessory mode, [canJoinAllSpaces](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallspaces) and [fullScreenAuxiliary](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/fullscreenauxiliary) settings support Spaces and other apps' ordinary full-screen spaces. A Space change repositions the drawer and calls `orderFrontRegardless` without activating the app.
 
-展开为 360×190，收起窗口本身为 12×92，不保留透明全尺寸命中区。屏幕移除/分辨率变化后重算外侧右缘，尽量避开屏幕接缝。用户主动打开主窗口时可以获取焦点。
+The expanded window is 360×190; the collapsed window itself is 12×92, without a transparent full-size hit area. Display removal or resolution changes recalculate the outer right edge to avoid display seams where possible. Explicitly opening the main window may acquire focus.
 
-## 2026-10-29 设计稿适配
+## 2026-10-29 design adaptation
 
-采用用户提供 HTML 设计稿的紧凑布局：计时小窗 360×190、菜单栏面板宽 248、设置窗 480×520。背景 `#F0F0F2`、正文 `#1C1C1E`、辅助文字 `#6E6E73`、分隔线 `#DCDCE1`、工作 `#E8513F`、休息 `#16956B`。使用设计稿字体栈中的原生系统字体，计时数字采用 72/52 pt 细体、等宽数字与轻微负字距；未引入外部字体或 WebView。小窗使用真实 AppKit 窗口按钮，独立的日历与记录窗口保留完整的历史编辑功能。
+The user's HTML design supplies the compact layout: a 360×190 timer, a 248 pt menu bar panel and a 480×520 settings window. Colors are `#F0F0F2` for the background, `#1C1C1E` for primary text, `#6E6E73` for secondary text, `#DCDCE1` for dividers, `#E8513F` for work and `#16956B` for breaks. The native system font from the design's font stack is used, with thin 72/52 pt monospaced timer digits and slightly negative tracking. There are no external fonts or WebViews. The timer uses real AppKit window controls, while a separate Calendar & History window retains full record editing.
 
-设计稿中的暂停续接、四轮长休、全屏休息、声音和开机启动未纳入本次 UI 改动。当前模型只有工作/休息/等待，顶部三个点对应这三个真实状态；活动中的主按钮为明确的停止图标，结束记录后重新开始会取得完整默认时长。默认时长与未来日程仍由 JSON 管理，设置中的数字是只读值。菜单栏倒计时开关是真实本地偏好，使用 UserDefaults 保存，不修改活动文件。
+The design's pause/resume behavior, long break after four rounds, full-screen breaks, sound and launch-at-login options are outside this UI change. The model has work, break and idle states, reflected by the three status dots. During an activity, the primary button has an explicit stop icon; restarting after ending a record grants the full default duration. JSON still controls default durations and future schedules; Settings displays durations as read-only values. The menu bar countdown toggle persists in UserDefaults without modifying the activity file.
 
-工作倒计时取提醒与固定截止的较早者；提醒已触发后显示 `+MM:SS` 超时量而不自动休息。休息使用引擎提供的实际截止（包含下一固定起点的接管）。底部进度是当前连续活动从开始至当前目标的比例；延长提醒重新计算目标，不拆记录。等待显示下一次默认工作时长；写入失败与时钟回拨时，显示冻结在最后观察时间，错误入口能打开完整说明。图标按钮提供中文名称、悬停提示及键盘焦点反馈，额外操作在右键菜单与日历窗口可达。
+The work countdown uses the earlier of the reminder or fixed end. After the reminder, it shows `+MM:SS` overtime and keeps recording work. Breaks use the engine's actual deadline, including takeover by the next scheduled work start. Bottom progress measures the current continuous activity from its start to the current target. Extending a reminder recalculates that target without splitting the record. Idle shows the next default work duration. On a write failure or clock rollback, the display freezes at the last observation, and the error control opens full details. Icon controls provide accessible names, hover descriptions and keyboard focus feedback; additional actions are available in context menus and the calendar window.
 
-这些 API 设置与几何测试不构成实际 macOS 窗口验收；尤其普通应用全屏、Stage Manager、Dock 位于右侧、多屏混合缩放、各显示器独立 Spaces 和系统版本差异须按验收清单实测。受保护的系统/登录界面不在承诺范围内。
+These API settings and geometry tests do not constitute full macOS window acceptance. Other apps' full-screen spaces, Stage Manager, a right-side Dock, mixed display scaling, independent display Spaces and OS-version differences require the acceptance checklist on real hardware. Protected system and login screens are outside the supported scope.
+
+## English language policy
+
+The interface, dates, app-owned errors, documentation, source comments, script output and release notes use English. Presentation uses an explicit English locale with 24-hour time, preserving the scheduling calendar and local time zone. Old built-in template identifiers are matched through Unicode escapes and mapped to English display names without changing stored keys. Regression fixtures retain escaped multilingual values to test compatibility and prevent localized system errors from leaking into the interface. Custom template names and other user-authored data are preserved.

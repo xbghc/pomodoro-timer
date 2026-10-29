@@ -58,9 +58,10 @@ public struct ScheduleConfiguration: Codable, Equatable, Sendable {
     /// Translate earlier built-in names for display only; saved identifiers stay intact.
     public func displayName(for templateID: String) -> String {
         let title: String
+        // Escaped legacy Chinese identifiers preserve existing files without non-English source text.
         switch templateID {
-        case "常规日": title = "Regular day"
-        case "无固定时段": title = "No fixed hours"
+        case "\u{5E38}\u{89C4}\u{65E5}": title = "Regular day"
+        case "\u{65E0}\u{56FA}\u{5B9A}\u{65F6}\u{6BB5}": title = "No fixed hours"
         default: return templateID
         }
         var candidate = title

@@ -2,6 +2,11 @@ import XCTest
 @testable import PomodoroCore
 
 final class EnglishPresentationTests: XCTestCase {
+    // Keep multilingual fixture values to verify compatibility and language-independent errors.
+    private let legacyRegularDay = "\u{5E38}\u{89C4}\u{65E5}"
+    private let legacyNoFixedHours = "\u{65E0}\u{56FA}\u{5B9A}\u{65F6}\u{6BB5}"
+    private let customTemplateName = "\u{6DF1}\u{5EA6}\u{5DE5}\u{4F5C}"
+
     func testEnglishDatesKeepTheRequestedTimeZoneAndCalendar() {
         var calendar = utc
         calendar.locale = Locale(identifier: "zh_CN")
@@ -19,38 +24,38 @@ final class EnglishPresentationTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try JSONActivityStore(directory: directory)
-        let config = ScheduleConfiguration(defaultTemplate: "常规日", weekdays: ["3": "常规日"], templates: [
-            "常规日": [WorkBlock(start: "10:00", end: "12:10")], "无固定时段": []
+        let config = ScheduleConfiguration(defaultTemplate: legacyRegularDay, weekdays: ["3": legacyRegularDay], templates: [
+            legacyRegularDay: [WorkBlock(start: "10:00", end: "12:10")], legacyNoFixedHours: []
         ])
         let data = try JSONActivityStore.encoder().encode(config)
         try data.write(to: store.configurationURL)
         let loaded = try store.loadConfiguration()
         XCTAssertEqual(loaded, config)
-        XCTAssertEqual(loaded.displayName(for: "常规日"), "Regular day")
-        XCTAssertEqual(loaded.displayName(for: "无固定时段"), "No fixed hours")
-        let selection = DayTemplateSelection(day: "2026-10-21", templateID: "无固定时段")
+        XCTAssertEqual(loaded.displayName(for: legacyRegularDay), "Regular day")
+        XCTAssertEqual(loaded.displayName(for: legacyNoFixedHours), "No fixed hours")
+        let selection = DayTemplateSelection(day: "2026-10-21", templateID: legacyNoFixedHours)
         XCTAssertTrue(ScheduleResolver(calendar: utc).blocks(on: time("10:00"), configuration: loaded, selection: selection).isEmpty)
         XCTAssertEqual(try Data(contentsOf: store.configurationURL), data)
     }
 
     func testLegacyDisplayNamesStayDistinctFromUserDefinedNames() {
-        let config = ScheduleConfiguration(defaultTemplate: "常规日", templates: [
-            "常规日": [], "Regular day": [], "Regular day (1)": [], "深度工作": []
+        let config = ScheduleConfiguration(defaultTemplate: legacyRegularDay, templates: [
+            legacyRegularDay: [], "Regular day": [], "Regular day (1)": [], customTemplateName: []
         ])
-        XCTAssertEqual(config.displayName(for: "常规日"), "Regular day (2)")
+        XCTAssertEqual(config.displayName(for: legacyRegularDay), "Regular day (2)")
         XCTAssertEqual(config.displayName(for: "Regular day"), "Regular day")
-        XCTAssertEqual(config.displayName(for: "深度工作"), "深度工作")
+        XCTAssertEqual(config.displayName(for: customTemplateName), customTemplateName)
     }
 
     func testSystemErrorCopyDoesNotUseTheSystemLanguage() {
         let error = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError,
-                            userInfo: [NSLocalizedDescriptionKey: "磁盘空间不足"])
+                            userInfo: [NSLocalizedDescriptionKey: "\u{78C1}\u{76D8}\u{7A7A}\u{95F4}\u{4E0D}\u{8DB3}"])
         let message = UserFacingError.message(error)
         XCTAssertTrue(message.contains("not enough disk space"))
         XCTAssertTrue(message.contains("code \(NSFileWriteOutOfSpaceError)"))
-        XCTAssertFalse(message.contains("磁盘"))
+        XCTAssertFalse(message.contains("\u{78C1}\u{76D8}"))
         let unknown = NSError(domain: "TestDomain", code: 42,
-                              userInfo: [NSLocalizedDescriptionKey: "发生错误"])
+                              userInfo: [NSLocalizedDescriptionKey: "\u{53D1}\u{751F}\u{9519}\u{8BEF}"])
         XCTAssertEqual(UserFacingError.message(unknown), "The operation could not be completed. (TestDomain, code 42)")
     }
 
