@@ -1,5 +1,15 @@
 # 实际验证记录
 
+## 2026-10-29：v2.1.1 英文界面与双架构验证通过
+
+[运行 40851510330](https://github.com/xbghc/pomodoro-timer/actions/runs/40851510330) 全部成功，源码提交 `325a546e594ca8a8be5adb37622a0715546b1f68`。Linux / Swift 6.0.3、Intel / Xcode 16.0、Apple Silicon / Xcode 16.4 均通过 **70 项测试、0 失败**。两个 Mac 均完成 SwiftUI/AppKit 编译、链接、release 打包、ad-hoc 签名、ZIP 解压检查、架构与 `minos 13.0` 验证。
+
+两个 Mac 均通过进程参数以中文语言偏好（`zh-Hans`、`zh_CN`）启动应用，各生成 **14 张真实截图**，`manifest.json` 均为 `passed`。截图脚本检查操作过程中读取的无障碍树，无中文界面文案。下载后核对两个 artifact 摘要与全部 28 张 PNG 的 SHA-256；ARM 全套逐张目视检查，Intel 抽检主计时窗、设置、活动编辑、临时时长弹窗与菜单栏面板，未见文字截断或控件重叠。日期、原生日期编辑控件和弹窗均显示英文。
+
+新增 5 项测试覆盖英文日期与本地时区、旧模板标识和选择兼容、模板显示名冲突、自定义名称保留，以及系统错误和 JSON 字段错误的英文提示。读取旧配置不会改写文件；已有记录和用户自定义内容保持原样。本地同样通过 70 项测试、原生源码与辅助脚本语法检查、`git diff --check`。
+
+本次没有更改系统语言、保存的偏好或安全权限。上述结果只覆盖记录下来的单屏操作；macOS 13 实机、跨 Spaces、多屏和睡眠集成仍按 [验收清单](macos-acceptance.md) 人工检查。后续发布准备仅补充文档，产品源码与上述成功截图一致。
+
 ## 2026-10-29：v2.1.0 双架构原生构建与截图通过
 
 用户要求发版后，验证分支运行 [40845616588](https://github.com/xbghc/pomodoro-timer/actions/runs/40845616588) 全部成功，源码提交 `8b55c2fd30d517f2d007f56a9a2f5c228de1c209`。Linux、Intel / Xcode 16.0、Apple Silicon / Xcode 16.4 均通过 65 项测试；两个 Mac 均完成 SwiftUI/AppKit 编译、链接、release 打包、ad-hoc 签名、架构与 macOS 13.0 最低部署目标检查。
